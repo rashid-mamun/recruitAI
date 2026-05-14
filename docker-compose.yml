@@ -1,0 +1,127 @@
+version: '3.9'
+
+services:
+  # ── MongoDB
+  mongo:
+    image: mongo:7
+    container_name: recruiting-mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: recruiting
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis
+  redis:
+    image: redis:7-alpine
+    container_name: recruiting-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Redis Commander (Redis GUI) 
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: recruiting-redis-ui
+    restart: unless-stopped
+    ports:
+      - '8081:8081'
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── API Server ───
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+      target: development
+    container_name: recruiting-api
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    env_file:
+      - .env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/recruiting
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      FRONTEND_URL: http://localhost:5173
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run dev
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3001/health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Worker Process (separate from API!) 
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+      target: development
+    container_name: recruiting-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/recruiting
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: npm run dev:worker
+
+  # ── React Web App 
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      target: development
+    container_name: recruiting-web
+    restart: unless-stopped
+    ports:
+      - '5173:5173'
+    environment:
+      VITE_API_URL: http://localhost:3001
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    command: npm run dev
+
+volumes:
+  mongo_data:
+  redis_data:
