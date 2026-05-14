@@ -1,0 +1,669 @@
+{
+    "info": {
+        "name": "Recruit AI Platform — Complete API",
+        "description": "Full Postman collection for apps/api. Covers Health, Auth, Jobs, Sourcing, Candidates, Tasks (SSE), Queue Stats, Stream, Admin, Docs.\n\nQuick start:\n1. Run 'Register' or 'Login' — authToken is auto-saved to collection variable.\n2. Set jobId / candidateId / taskId variables after creating resources.\n3. baseUrl defaults to http://localhost:3000.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "_postman_id": "6d8f9b2a-1111-4000-8000-abcdef123456"
+    },
+    "variable": [
+        { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+        { "key": "authToken", "value": "", "type": "string" },
+        { "key": "jobId", "value": "", "type": "string" },
+        { "key": "candidateId", "value": "", "type": "string" },
+        { "key": "taskId", "value": "", "type": "string" }
+    ],
+    "item": [
+        {
+            "name": "🩺 Health",
+            "item": [
+                {
+                    "name": "Liveness — GET /health",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/health",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["health"]
+                        }
+                    }
+                },
+                {
+                    "name": "Readiness — GET /health/ready",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/health/ready",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["health", "ready"]
+                        }
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "🔐 Auth",
+            "item": [
+                {
+                    "name": "Register — POST /api/auth/register",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "  const json = pm.response.json();",
+                                    "  pm.collectionVariables.set('authToken', json.data.token);",
+                                    "  console.log('Token saved:', json.data.token);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [{ "key": "Content-Type", "value": "application/json" }],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Jane Recruiter\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"StrongPass!1\",\n  \"role\": \"recruiter\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/auth/register",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "auth", "register"]
+                        }
+                    }
+                },
+                {
+                    "name": "Login — POST /api/auth/login",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "  const json = pm.response.json();",
+                                    "  pm.collectionVariables.set('authToken', json.data.token);",
+                                    "  console.log('Token saved:', json.data.token);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [{ "key": "Content-Type", "value": "application/json" }],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"jane@example.com\",\n  \"password\": \"StrongPass!1\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/auth/login",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "auth", "login"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Me — GET /api/auth/me",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/auth/me",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "auth", "me"]
+                        }
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "💼 Jobs",
+            "item": [
+                {
+                    "name": "Create Job — POST /api/jobs",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "  const json = pm.response.json();",
+                                    "  pm.collectionVariables.set('jobId', json.data._id);",
+                                    "  console.log('jobId saved:', json.data._id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Senior Node.js Engineer\",\n  \"description\": \"Build scalable APIs and background job pipelines for our AI recruiting platform.\",\n  \"requirements\": [\"5+ years Node.js\", \"TypeScript\", \"MongoDB\", \"Redis\"],\n  \"location\": \"Remote\",\n  \"type\": \"full-time\",\n  \"status\": \"active\",\n  \"sourcingQueries\": [\"senior nodejs engineer remote\", \"backend engineer typescript\"]\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/jobs",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "jobs"]
+                        }
+                    }
+                },
+                {
+                    "name": "List Jobs — GET /api/jobs",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/jobs?page=1&limit=20&status=active&sort=-createdAt",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "jobs"],
+                            "query": [
+                                { "key": "page", "value": "1" },
+                                { "key": "limit", "value": "20" },
+                                {
+                                    "key": "status",
+                                    "value": "active",
+                                    "description": "active | paused | closed"
+                                },
+                                {
+                                    "key": "sort",
+                                    "value": "-createdAt",
+                                    "description": "createdAt | -createdAt | title | -title"
+                                },
+                                { "key": "search", "value": "", "disabled": true }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Job — GET /api/jobs/:id",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "jobs", "{{jobId}}"]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Job — PATCH /api/jobs/:id",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Lead Node.js Engineer\",\n  \"status\": \"paused\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "jobs", "{{jobId}}"]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Job — DELETE /api/jobs/:id",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "jobs", "{{jobId}}"]
+                        }
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "🔍 Sourcing",
+            "item": [
+                {
+                    "name": "Start Sourcing Task — POST /api/jobs/:jobId/sourcing-tasks",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 202) {",
+                                    "  const json = pm.response.json();",
+                                    "  pm.collectionVariables.set('taskId', json.data.taskId);",
+                                    "  console.log('taskId saved:', json.data.taskId);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"query\": \"senior nodejs engineer remote\",\n  \"limit\": 10\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/jobs/{{jobId}}/sourcing-tasks",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "jobs", "{{jobId}}", "sourcing-tasks"]
+                        },
+                        "description": "Queues a BullMQ sourcing job. Returns taskId (202). Use the Tasks SSE stream to track progress."
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "👤 Candidates",
+            "item": [
+                {
+                    "name": "List Candidates — GET /api/jobs/:jobId/candidates",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/jobs/{{jobId}}/candidates?page=1&limit=20",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "jobs", "{{jobId}}", "candidates"],
+                            "query": [
+                                { "key": "page", "value": "1" },
+                                { "key": "limit", "value": "20" },
+                                {
+                                    "key": "status",
+                                    "value": "scored",
+                                    "disabled": true,
+                                    "description": "sourced | scored | contacted | responded | scheduling | rejected"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Candidate — GET /api/:id",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/{{candidateId}}",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "{{candidateId}}"]
+                        },
+                        "description": "NOTE: candidateRouter is mounted at /api, so the path is /api/:id (not /api/candidates/:id)"
+                    }
+                },
+                {
+                    "name": "Score Candidate (queue) — POST /api/:id/scores",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 202) {",
+                                    "  const json = pm.response.json();",
+                                    "  pm.collectionVariables.set('taskId', json.data.taskId);",
+                                    "  console.log('taskId saved:', json.data.taskId);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/{{candidateId}}/scores",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "{{candidateId}}", "scores"],
+                            "query": [
+                                {
+                                    "key": "refresh",
+                                    "value": "true",
+                                    "disabled": true,
+                                    "description": "Set to true to bypass cache and force re-score"
+                                }
+                            ]
+                        },
+                        "description": "Queues an AI scoring task (202). If a valid AI score is already cached returns 200 with the score directly. Add ?refresh=true to force re-score."
+                    }
+                },
+                {
+                    "name": "Score Candidate (force refresh) — POST /api/:id/scores?refresh=true",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 202) {",
+                                    "  const json = pm.response.json();",
+                                    "  pm.collectionVariables.set('taskId', json.data.taskId);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/{{candidateId}}/scores?refresh=true",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "{{candidateId}}", "scores"],
+                            "query": [{ "key": "refresh", "value": "true" }]
+                        },
+                        "description": "Forces cache bypass and re-queues a fresh AI scoring job regardless of existing cache."
+                    }
+                },
+                {
+                    "name": "Send Outreach — POST /api/:id/outreach",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 202) {",
+                                    "  const json = pm.response.json();",
+                                    "  pm.collectionVariables.set('taskId', json.data.taskId);",
+                                    "  console.log('taskId saved:', json.data.taskId);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"jobId\": \"{{jobId}}\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/{{candidateId}}/outreach",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "{{candidateId}}", "outreach"]
+                        },
+                        "description": "Queues an AI outreach message generation task (202). Returns taskId to track via SSE."
+                    }
+                },
+                {
+                    "name": "Classify Response — POST /api/:id/responses",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"message\": \"Thanks for reaching out — I'm very interested in learning more about this role!\"\n}",
+                            "options": { "raw": { "language": "json" } }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/{{candidateId}}/responses",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "{{candidateId}}", "responses"]
+                        },
+                        "description": "Classifies candidate reply intent (interested / not_interested / maybe) using AI. Updates candidate status and the most recent message record."
+                    }
+                },
+                {
+                    "name": "Get Candidate Messages — GET /api/:id/messages",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/{{candidateId}}/messages",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "{{candidateId}}", "messages"]
+                        },
+                        "description": "Returns all outreach messages sent to this candidate, sorted by createdAt ascending."
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "📋 Tasks",
+            "item": [
+                {
+                    "name": "Get Task — GET /api/tasks/:taskId",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "tasks", "{{taskId}}"]
+                        },
+                        "description": "Returns a task snapshot (status, progress, result, error). For live updates use the /stream endpoint."
+                    }
+                },
+                {
+                    "name": "Task SSE Stream — GET /api/tasks/:taskId/stream",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            },
+                            { "key": "Accept", "value": "text/event-stream" },
+                            { "key": "Cache-Control", "value": "no-cache" }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/tasks/{{taskId}}/stream",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "tasks", "{{taskId}}", "stream"]
+                        },
+                        "description": "Server-Sent Events stream for a specific task.\n\n- Immediately sends a DB snapshot event on connect.\n- Streams live `task_updated` events as the worker progresses.\n- Auto-closes when task reaches `completed` or `failed`.\n\nEvent format:\nevent: task_updated\ndata: {\"_id\":\"...\",\"status\":\"processing\",\"progress\":60,...}\n\nNOTE: Postman has limited SSE support — use a browser or curl for full streaming."
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "📊 Queue Stats",
+            "item": [
+                {
+                    "name": "Get Queue Stats — GET /api/queue-stats",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/queue-stats",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "queue-stats"]
+                        },
+                        "description": "Returns waiting / active / completed / failed / delayed counts for all BullMQ queues (sourcing, scoring, outreach). This endpoint is PUBLIC — no auth required."
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "📡 Stream (SSE — Legacy)",
+            "item": [
+                {
+                    "name": "Global SSE Handshake — GET /api/stream/events",
+                    "request": {
+                        "method": "GET",
+                        "header": [{ "key": "Accept", "value": "text/event-stream" }],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/stream/events",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "stream", "events"]
+                        },
+                        "description": "Legacy global SSE endpoint. Prefer /api/tasks/:taskId/stream for task-specific real-time updates."
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "🛠 Admin / Bull Board",
+            "item": [
+                {
+                    "name": "Bull Board UI — GET /admin/queues",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{authToken}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/admin/queues",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["admin", "queues"]
+                        },
+                        "description": "Opens the Bull Board queue monitoring UI. Requires an admin-role JWT token."
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "📖 Docs",
+            "item": [
+                {
+                    "name": "Swagger UI — GET /api/docs",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/docs",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["api", "docs"]
+                        },
+                        "description": "Opens the interactive Swagger/OpenAPI UI. No auth required."
+                    }
+                }
+            ]
+        }
+    ],
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": { "type": "text/javascript", "exec": [] }
+        },
+        {
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [] }
+        }
+    ]
+}
