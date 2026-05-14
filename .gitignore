@@ -1,0 +1,50 @@
+# ─── Dependencies ───
+node_modules/
+.pnpm-store/
+.npm/
+
+# ─── Build & Outputs ───
+dist/
+build/
+out/
+.turbo/
+.next/
+.cache/
+public/build/
+*.tsbuildinfo
+
+# ─── Environment ───
+.env
+.env.local
+.env.*.local
+.env.test
+.env.production
+.env.development
+# Exclude example file from being ignored
+!.env.example
+
+# ─── Logs & Debug ───
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Editor & OS ───
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Testing ───
+coverage/
+.nyc_output/
+
+# ─── Misc ───
+.eslintcache
+.stylelintcache
