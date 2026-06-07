@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # ── MongoDB
   mongo:
@@ -50,13 +48,13 @@ services:
   # ── API Server ───
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
       target: development
     container_name: recruiting-api
     restart: unless-stopped
     ports:
-      - '3001:3001'
+      - '5000:5000'
     env_file:
       - .env
     environment:
@@ -65,16 +63,17 @@ services:
       REDIS_PORT: '6379'
       FRONTEND_URL: http://localhost:5173
     volumes:
-      - ./apps/api:/app
+      - .:/app
       - /app/node_modules
+      - /app/apps/api/node_modules
     depends_on:
       mongo:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: npm run dev
+    command: pnpm run dev
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:3001/health']
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:5000/health >/dev/null 2>&1 || exit 1']
       interval: 15s
       timeout: 5s
       retries: 5
@@ -82,8 +81,8 @@ services:
   # ── Worker Process (separate from API!) 
   worker:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
       target: development
     container_name: recruiting-worker
     restart: unless-stopped
@@ -94,8 +93,9 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: '6379'
     volumes:
-      - ./apps/api:/app
+      - .:/app
       - /app/node_modules
+      - /app/apps/api/node_modules
     depends_on:
       mongo:
         condition: service_healthy
@@ -103,24 +103,26 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
-    command: npm run dev:worker
+    command: pnpm run dev:worker
 
   # ── React Web App 
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
       target: development
     container_name: recruiting-web
     restart: unless-stopped
     ports:
       - '5173:5173'
     environment:
-      VITE_API_URL: http://localhost:3001
+      VITE_API_URL: http://localhost:5000
+      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     volumes:
-      - ./apps/web:/app
+      - .:/app
       - /app/node_modules
-    command: npm run dev
+      - /app/apps/web/node_modules
+    command: pnpm run dev
 
 volumes:
   mongo_data:
