@@ -16,11 +16,60 @@ function handleUnauthorized() {
     }
 }
 
+function getFriendlyErrorMessage(error: any): string {
+    const status = error.response?.status;
+    const code = error.response?.data?.code;
+    const raw = String(error.response?.data?.error ?? error.message ?? '').toLowerCase();
+
+    if (!error.response) {
+        return 'Unable to connect. Please check your internet connection and try again.';
+    }
+
+    if (code === 'AUTH_PROVIDER_UNAVAILABLE' || raw.includes('google sign-in is not configured')) {
+        return 'Google sign-in is temporarily unavailable. Please use email and password.';
+    }
+
+    if (code === 'GOOGLE_AUTH_FAILED' || raw.includes('google credential')) {
+        return 'Google sign-in failed. Please try again or use email and password.';
+    }
+
+    if (status === 401) {
+        return 'Your session has expired. Please sign in again.';
+    }
+
+    if (status === 403) {
+        return 'You do not have permission to perform this action.';
+    }
+
+    if (status === 404) {
+        return 'We could not find what you were looking for.';
+    }
+
+    if (status === 409) {
+        return 'This item already exists.';
+    }
+
+    if (status === 429) {
+        return 'Too many requests. Please wait a moment and try again.';
+    }
+
+    if (status >= 500) {
+        return 'Something went wrong on our side. Please try again.';
+    }
+
+    return error.response?.data?.error ?? error.message ?? 'An unexpected error occurred.';
+}
+
 export const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
     timeout: 30_000,
     headers: { 'Content-Type': 'application/json' },
 });
+
+export function buildApiUrl(path: string): string {
+    const baseURL = api.defaults.baseURL || window.location.origin;
+    return new URL(path, baseURL).toString();
+}
 
 // ─── Request interceptor ──────────
 api.interceptors.request.use(
@@ -40,8 +89,7 @@ api.interceptors.response.use(
         if (error.response?.status === 401) {
             handleUnauthorized();
         }
-        const message =
-            error.response?.data?.error ?? error.message ?? 'An unexpected error occurred';
+        const message = getFriendlyErrorMessage(error);
         return Promise.reject(new Error(message));
     },
 );

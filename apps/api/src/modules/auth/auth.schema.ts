@@ -17,5 +17,10 @@ export const loginSchema = z.object({
     password: z.string().min(1, 'Password is required'),
 });
 
+export const googleLoginSchema = z.object({
+    credential: z.string().min(1, 'Google credential is required'),
+});
+
 export type RegisterDto = z.infer<typeof registerSchema>;
 export type LoginDto = z.infer<typeof loginSchema>;
+export type GoogleLoginDto = z.infer<typeof googleLoginSchema>;

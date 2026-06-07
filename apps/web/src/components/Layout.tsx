@@ -6,7 +6,7 @@ import CommandPalette, { pushRecentPage } from './CommandPalette';
 import NotificationCenter from './NotificationCenter';
 import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useState } from 'react';
-import { getCandidate, getJob } from '@/services/api';
+import { buildApiUrl, getCandidate, getJob } from '@/services/api';
 import Sidebar from './Sidebar';
 
 const THEME_KEY = 'recruit-ai-theme';
@@ -24,7 +24,7 @@ export default function Layout() {
     );
 
     useEffect(() => {
-        const eventSource = new EventSource('/api/stream/events');
+        const eventSource = new EventSource(buildApiUrl('/api/stream/events'));
 
         eventSource.onmessage = () => {
             queryClient.invalidateQueries({ queryKey: ['candidates'] });

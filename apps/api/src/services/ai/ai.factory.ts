@@ -3,6 +3,7 @@ import { logger } from '@/config/logger';
 import type { IAiProvider } from './ai.interface';
 import { openaiProvider } from './providers/openai.provider';
 import { geminiProvider } from './providers/gemini.provider';
+import { groqProvider } from './providers/groq.provider';
 
 export class AiFactory {
     static getProvider(): IAiProvider {
@@ -15,6 +16,13 @@ export class AiFactory {
                 );
             }
             return openaiProvider;
+        }
+
+        if (providerName.toLowerCase() === 'groq') {
+            if (!env.GROQ_API_KEY) {
+                logger.warn('Groq selected but no API key found.');
+            }
+            return groqProvider;
         }
 
         if (!env.GEMINI_API_KEY) {

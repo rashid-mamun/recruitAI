@@ -1,4 +1,3 @@
-import React from 'react';
 import { JobStats } from '@/types';
 
 interface PipelineStatsProps {

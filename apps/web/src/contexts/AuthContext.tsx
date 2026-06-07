@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     getMe,
     login as loginService,
+    loginWithGoogle as googleLoginService,
     register as registerService,
     logout as logoutService,
     getToken as getStoredToken,
@@ -13,6 +14,7 @@ const AuthContext = createContext<AuthContextType>({
     user: null,
     login: async () => {},
     register: async () => {},
+    loginWithGoogle: async () => {},
     logout: () => {},
     isAuthenticated: false,
     isLoading: true,
@@ -47,26 +49,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         initAuth();
     }, [navigate]);
 
-    const login = async (email: string, password: string) => {
-        const profile = await loginService(email, password);
-        setUser(profile);
-        navigate('/');
-    };
+    const login = useCallback(
+        async (email: string, password: string) => {
+            const profile = await loginService(email, password);
+            setUser(profile);
+            navigate('/');
+        },
+        [navigate],
+    );
 
-    const register = async (name: string, email: string, password: string) => {
-        const profile = await registerService(name, email, password);
-        setUser(profile);
-        navigate('/');
-    };
+    const register = useCallback(
+        async (name: string, email: string, password: string) => {
+            const profile = await registerService(name, email, password);
+            setUser(profile);
+            navigate('/');
+        },
+        [navigate],
+    );
 
-    const logout = () => {
+    const loginWithGoogle = useCallback(
+        async (credential: string) => {
+            const profile = await googleLoginService(credential);
+            setUser(profile);
+            navigate('/');
+        },
+        [navigate],
+    );
+
+    const logout = useCallback(() => {
         logoutService(true);
         setUser(null);
-    };
+    }, []);
 
     return (
         <AuthContext.Provider
-            value={{ user, login, register, logout, isAuthenticated: !!user, isLoading }}
+            value={{
+                user,
+                login,
+                register,
+                loginWithGoogle,
+                logout,
+                isAuthenticated: !!user,
+                isLoading,
+            }}
         >
             {children}
         </AuthContext.Provider>

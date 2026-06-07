@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '@/middleware/errorHandler';
 import * as AuthService from './auth.service';
-import { registerSchema, loginSchema } from './auth.schema';
+import { registerSchema, loginSchema, googleLoginSchema } from './auth.schema';
 
 /**
  * Register a new user
@@ -24,6 +24,21 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 export const login = asyncHandler(async (req: Request, res: Response) => {
     const dto = loginSchema.parse(req.body);
     const { user, token } = await AuthService.loginUser(dto);
+
+    res.json({
+        success: true,
+        data: { user, token },
+        user,
+        token,
+    });
+});
+
+/**
+ * Login or register with Google
+ */
+export const googleLogin = asyncHandler(async (req: Request, res: Response) => {
+    const dto = googleLoginSchema.parse(req.body);
+    const { user, token } = await AuthService.loginWithGoogle(dto);
 
     res.json({
         success: true,

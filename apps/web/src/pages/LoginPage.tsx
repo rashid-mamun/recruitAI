@@ -1,16 +1,106 @@
-import { useState } from 'react';
-import { LogIn, Eye, EyeOff } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import {
+    ArrowRight,
+    BriefcaseBusiness,
+    Eye,
+    EyeOff,
+    LockKeyhole,
+    Mail,
+    Sparkles,
+    User,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
-    const { login, register } = useAuth();
+    const { login, register, loginWithGoogle } = useAuth();
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const googleButtonRef = useRef<HTMLDivElement | null>(null);
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+    useEffect(() => {
+        if (!googleClientId || !googleButtonRef.current) return;
+
+        let cancelled = false;
+
+        const loadGoogleScript = () =>
+            new Promise<void>((resolve, reject) => {
+                if (window.google?.accounts?.id) {
+                    resolve();
+                    return;
+                }
+
+                const existing = document.querySelector<HTMLScriptElement>(
+                    'script[src="https://accounts.google.com/gsi/client"]',
+                );
+                if (existing) {
+                    existing.addEventListener('load', () => resolve(), { once: true });
+                    existing.addEventListener('error', () => reject(), { once: true });
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = 'https://accounts.google.com/gsi/client';
+                script.async = true;
+                script.defer = true;
+                script.onload = () => resolve();
+                script.onerror = () => reject();
+                document.head.appendChild(script);
+            });
+
+        loadGoogleScript()
+            .then(() => {
+                if (cancelled || !googleButtonRef.current || !window.google?.accounts?.id) return;
+                googleButtonRef.current.innerHTML = '';
+                window.google.accounts.id.initialize({
+                    client_id: googleClientId,
+                    callback: async (response) => {
+                        if (!response.credential) {
+                            setError('Google sign-in did not return a credential');
+                            return;
+                        }
+
+                        setError('');
+                        setGoogleLoading(true);
+                        try {
+                            await loginWithGoogle(response.credential);
+                        } catch (err: any) {
+                            setError(
+                                err?.message ||
+                                    'Google sign-in failed. Please try again or use email and password.',
+                            );
+                        } finally {
+                            setGoogleLoading(false);
+                        }
+                    },
+                });
+                window.google.accounts.id.renderButton(googleButtonRef.current, {
+                    theme: 'outline',
+                    size: 'large',
+                    type: 'standard',
+                    shape: 'rectangular',
+                    text: isLogin ? 'signin_with' : 'signup_with',
+                    width: 320,
+                });
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setError(
+                        'Google sign-in is temporarily unavailable. Please use email and password.',
+                    );
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [googleClientId, isLogin, loginWithGoogle]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -31,39 +121,40 @@ export default function LoginPage() {
     };
 
     return (
-        <div
-            className="min-h-screen flex items-center justify-center p-6 animate-fade-in app-shell auth-shell"
-            style={{ backgroundColor: 'var(--color-bg)' }}
-        >
-            <div className="card card-glowing w-full max-w-md p-8 animate-slide-up section-panel auth-card">
-                <div className="flex flex-col items-center mb-8">
-                    <div
-                        className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 text-white animated-float"
-                        style={{
-                            background:
-                                'linear-gradient(135deg, var(--color-primary), var(--color-secondary))',
-                            boxShadow: 'var(--shadow-glow)',
-                            width: '64px',
-                            height: '64px',
-                        }}
-                    >
-                        <LogIn size={32} />
+        <main className="auth-shell animate-fade-in">
+            <section
+                className="auth-card-v2 animate-slide-up"
+                aria-label="RecruitAI authentication"
+            >
+                <div className="auth-card-v2__mast">
+                    <div className="auth-brand">
+                        <span className="auth-brand-mark">
+                            <BriefcaseBusiness size={22} />
+                        </span>
+                        <span>RecruitAI</span>
                     </div>
-                    <h1
-                        className="text-2xl font-bold m-0 text-white"
-                        style={{ fontFamily: 'var(--font-display)' }}
-                    >
-                        Recruit AI Platform
-                    </h1>
-                    <p className="text-muted text-sm mt-2">
-                        Sign in to manage your automated pipelines
+
+                    <div className="auth-hero__badge">
+                        <Sparkles size={14} />
+                        Hiring operations
+                    </div>
+                </div>
+
+                <div className="auth-panel__header">
+                    <p className="auth-kicker">{isLogin ? 'Welcome back' : 'Create workspace'}</p>
+                    <h1>{isLogin ? 'Sign in to RecruitAI' : 'Start using RecruitAI'}</h1>
+                    <p>
+                        {isLogin
+                            ? 'Access your recruiting command center.'
+                            : 'Set up your recruiter account in a few seconds.'}
                     </p>
                 </div>
 
-                <div className="auth-toggle-shell mb-6">
+                <div className="auth-toggle-shell" role="tablist" aria-label="Auth mode">
                     <button
                         type="button"
                         className={`auth-toggle-tab ${isLogin ? 'is-active' : ''}`}
+                        aria-pressed={isLogin}
                         onClick={() => {
                             if (!isLogin) {
                                 setIsLogin(true);
@@ -71,11 +162,12 @@ export default function LoginPage() {
                             }
                         }}
                     >
-                        Sign In
+                        Sign in
                     </button>
                     <button
                         type="button"
                         className={`auth-toggle-tab ${!isLogin ? 'is-active' : ''}`}
+                        aria-pressed={!isLogin}
                         onClick={() => {
                             if (isLogin) {
                                 setIsLogin(false);
@@ -83,19 +175,36 @@ export default function LoginPage() {
                             }
                         }}
                     >
-                        Sign Up
+                        Sign up
                     </button>
                 </div>
 
+                <div className="auth-google-area">
+                    {googleClientId ? (
+                        <>
+                            <div
+                                ref={googleButtonRef}
+                                className={
+                                    googleLoading
+                                        ? 'auth-google-button is-loading'
+                                        : 'auth-google-button'
+                                }
+                            />
+                            {googleLoading && <div className="auth-google-mask">Signing in...</div>}
+                        </>
+                    ) : (
+                        <div className="auth-google-missing">
+                            Add <code>VITE_GOOGLE_CLIENT_ID</code> to enable Google sign-in.
+                        </div>
+                    )}
+                </div>
+
+                <div className="auth-divider">
+                    <span>or continue with email</span>
+                </div>
+
                 {error && (
-                    <div
-                        className="p-4 mb-6 rounded-md border text-sm animate-fade-in"
-                        style={{
-                            backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                            borderColor: 'rgba(239, 68, 68, 0.4)',
-                            color: '#fca5a5',
-                        }}
-                    >
+                    <div className="auth-error animate-fade-in" role="alert">
                         {error}
                     </div>
                 )}
@@ -103,62 +212,68 @@ export default function LoginPage() {
                 <form
                     key={isLogin ? 'login' : 'signup'}
                     onSubmit={handleSubmit}
-                    className="flex flex-col gap-5 animate-pop"
+                    className="auth-form animate-pop"
                 >
                     {!isLogin && (
                         <div className="form-group">
-                            <label className="label">Full Name</label>
-                            <input
-                                className="input"
-                                required
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="John Doe"
-                            />
+                            <label className="label" htmlFor="auth-name">
+                                Full name
+                            </label>
+                            <div className="auth-field">
+                                <User size={17} />
+                                <input
+                                    id="auth-name"
+                                    className="input"
+                                    required
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="Jane Recruiter"
+                                />
+                            </div>
                         </div>
                     )}
 
                     <div className="form-group">
-                        <label className="label">Work Email</label>
-                        <input
-                            className="input"
-                            type="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="name@company.com"
-                        />
+                        <label className="label" htmlFor="auth-email">
+                            Work email
+                        </label>
+                        <div className="auth-field">
+                            <Mail size={17} />
+                            <input
+                                id="auth-email"
+                                className="input"
+                                type="email"
+                                autoComplete="email"
+                                required
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="name@company.com"
+                            />
+                        </div>
                     </div>
 
                     <div className="form-group">
-                        <label className="label">Password</label>
-                        <div style={{ position: 'relative', width: '100%' }}>
+                        <label className="label" htmlFor="auth-password">
+                            Password
+                        </label>
+                        <div className="auth-field auth-field--password">
+                            <LockKeyhole size={17} />
                             <input
+                                id="auth-password"
                                 className="input"
                                 type={showPassword ? 'text' : 'password'}
+                                autoComplete={isLogin ? 'current-password' : 'new-password'}
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
-                                style={{ paddingRight: 40 }}
+                                placeholder="Enter password"
                             />
                             <button
                                 type="button"
-                                style={{
-                                    position: 'absolute',
-                                    right: 12,
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    background: 'transparent',
-                                    border: 'none',
-                                    padding: 0,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    color: 'var(--color-text-muted)',
-                                }}
+                                className="auth-password-toggle"
                                 onClick={() => setShowPassword(!showPassword)}
                                 title={showPassword ? 'Hide password' : 'Show password'}
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
                             >
                                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
@@ -167,32 +282,30 @@ export default function LoginPage() {
 
                     <button
                         type="submit"
-                        className="btn btn--primary w-full justify-center mt-2 h-11 text-base font-semibold auth-submit-btn"
+                        className="btn btn--primary auth-submit-btn"
                         disabled={loading}
                     >
                         {loading ? (
                             <div className="spinner" />
                         ) : isLogin ? (
-                            'Sign In'
+                            <>
+                                Sign in
+                                <ArrowRight size={18} />
+                            </>
                         ) : (
-                            'Create Account'
+                            <>
+                                Create account
+                                <ArrowRight size={18} />
+                            </>
                         )}
                     </button>
                 </form>
 
-                <div className="mt-6 text-center text-sm text-muted">
+                <div className="auth-footer">
                     {isLogin ? "Don't have an account? " : 'Already have an account? '}
                     <button
                         type="button"
-                        className="text-primary font-bold ml-1 auth-toggle-link"
-                        style={{
-                            background: 'transparent',
-                            border: 'none',
-                            padding: 0,
-                            textDecoration: 'underline',
-                            cursor: 'pointer',
-                            fontSize: 'inherit',
-                        }}
+                        className="auth-toggle-link"
                         onClick={() => {
                             setIsLogin(!isLogin);
                             setError('');
@@ -201,7 +314,7 @@ export default function LoginPage() {
                         {isLogin ? 'Sign up' : 'Sign in'}
                     </button>
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
     );
 }

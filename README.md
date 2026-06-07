@@ -49,7 +49,7 @@ Fill in your keys:
 ```env
 # Server
 NODE_ENV=development
-PORT=3001
+PORT=5000
 JWT_SECRET=your_long_random_secret
 
 # Database
@@ -69,6 +69,11 @@ SERPER_API_KEY=your_serper_api_key
 
 # Frontend
 FRONTEND_URL=http://localhost:5173
+VITE_API_URL=http://localhost:5000
+
+# Google Sign-In
+GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
 
 # Email Notifications (optional — works with Gmail, SendGrid, AWS SES, etc.)
 SMTP_HOST=smtp.gmail.com
@@ -89,9 +94,9 @@ Starts: MongoDB, Redis, API server, Worker process (separate container), React f
 | Service      | URL                                   |
 | ------------ | ------------------------------------- |
 | Frontend     | http://localhost:5173                 |
-| API          | http://localhost:3001                 |
-| Swagger Docs | http://localhost:3001/api/docs        |
-| Bull Board   | http://localhost:3001/admin/queues \* |
+| API          | http://localhost:5000                 |
+| Swagger Docs | http://localhost:5000/api/docs        |
+| Bull Board   | http://localhost:5000/admin/queues \* |
 | Redis UI     | http://localhost:8081                 |
 
 > \* **Admin access only** — requires a valid JWT with `role: "admin"`.

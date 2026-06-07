@@ -1,0 +1,10 @@
+process.env.NODE_ENV = 'test';
+process.env.PORT = '5000';
+process.env.MONGODB_URI = 'mongodb://localhost:27017/test_dummy';
+process.env.REDIS_HOST = 'localhost';
+process.env.REDIS_PORT = '6379';
+process.env.JWT_SECRET = 'test_secret';
+process.env.ACTIVE_AI_PROVIDER = 'openai';
+process.env.OPENAI_API_KEY = 'test_openai_key';
+process.env.SOURCING_PROVIDER = 'mock';
+process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
