@@ -12,70 +12,11 @@ import {
     ArrowUpRight,
     ArrowDownRight,
 } from 'lucide-react';
-import {
-    duplicateJob,
-    getCandidates,
-    getJobStats,
-    getJobs,
-    updateJob,
-    getGlobalStats,
-} from '@/services/api';
+import { duplicateJob, getCandidates, getJobs, updateJob, getGlobalStats } from '@/services/api';
 import JobSlideOver from '@/components/JobSlideOver';
 import { useToast } from '@/contexts/ToastContext';
-import type { Candidate, Job, JobStats } from '@/types';
+import type { Candidate, Job } from '@/types';
 import { timeAgo } from '@/utils/timeAgo';
-
-const JOB_PALETTES = [
-    {
-        bg: '#EDE9FE',
-        color: '#6D28D9',
-        stages: ['#C4B5FD', '#A78BFA', '#8B5CF6', '#7C3AED', '#10B981'],
-    },
-    {
-        bg: '#CCFBF1',
-        color: '#0F766E',
-        stages: ['#99F6E4', '#5EEAD4', '#14B8A6', '#0F766E', '#10B981'],
-    },
-    {
-        bg: '#DBEAFE',
-        color: '#1D4ED8',
-        stages: ['#BFDBFE', '#93C5FD', '#60A5FA', '#3B82F6', '#10B981'],
-    },
-    {
-        bg: '#FEF3C7',
-        color: '#B45309',
-        stages: ['#FDE68A', '#FCD34D', '#F59E0B', '#D97706', '#10B981'],
-    },
-    {
-        bg: '#FFE4E6',
-        color: '#BE123C',
-        stages: ['#FECDD3', '#FDA4AF', '#FB7185', '#F43F5E', '#10B981'],
-    },
-    {
-        bg: '#DCFCE7',
-        color: '#15803D',
-        stages: ['#BBF7D0', '#86EFAC', '#4ADE80', '#22C55E', '#10B981'],
-    },
-];
-
-const STAGE_KEYS: Array<keyof JobStats> = [
-    'sourced',
-    'contacted',
-    'responded',
-    'interested',
-    'hired',
-];
-
-function hashTitle(title: string) {
-    return (
-        Array.from(title).reduce((sum, character) => sum + character.charCodeAt(0), 0) %
-        JOB_PALETTES.length
-    );
-}
-
-function getJobPalette(title: string) {
-    return JOB_PALETTES[hashTitle(title)];
-}
 
 function metricTone(value: number) {
     if (value >= 70) return '#10b981';
@@ -162,26 +103,6 @@ export default function JobsListPage() {
         avgScore: null,
         responseRate: null,
     };
-
-    const avgScore = globalStats.avgScore;
-    const responseRate = globalStats.responseRate;
-    const hasScores = globalStats.topScore !== null;
-    const hasOutreach = globalStats.contacted > 0;
-
-    const { data: jobStats } = useQuery({
-        queryKey: ['job-stats', jobs.map((j) => j._id).join(',')],
-        queryFn: async () => {
-            const results = await Promise.all(
-                jobs.map(async (job) => ({ jobId: job._id, stats: await getJobStats(job._id) })),
-            );
-            return results.reduce<Record<string, JobStats>>((acc, item) => {
-                acc[item.jobId] = item.stats;
-                return acc;
-            }, {});
-        },
-        enabled: jobs.length > 0,
-        staleTime: 30_000,
-    });
 
     const duplicateMutation = useMutation({
         mutationFn: (id: string) => duplicateJob(id),
@@ -898,7 +819,7 @@ export default function JobsListPage() {
                                             count: job.stats?.hired ?? 0,
                                             color: '#0d9488',
                                         },
-                                    ].map((stage, stageIndex) => {
+                                    ].map((stage) => {
                                         const active = stage.count > 0;
                                         return (
                                             <div

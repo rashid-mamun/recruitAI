@@ -8,6 +8,7 @@ export interface AuthContextType {
     user: User | null;
     login: (email: string, password: string) => Promise<void>;
     register: (name: string, email: string, password: string) => Promise<void>;
+    loginWithGoogle: (credential: string) => Promise<void>;
     logout: () => void;
     isAuthenticated: boolean;
     isLoading: boolean;
@@ -47,6 +48,15 @@ export interface Job {
     status: JobStatus;
     sourcingQueries: string[];
     candidateCount?: number;
+    stats?: {
+        new?: number;
+        scored?: number;
+        contacted?: number;
+        interested?: number;
+        hired?: number;
+        topScore?: number | null;
+        avgScore?: number | null;
+    };
     createdAt: string;
     updatedAt: string;
 }
@@ -92,6 +102,10 @@ export interface Candidate {
     source: string;
     status: CandidateStatus;
     score?: CandidateScore;
+    scoredAt?: string;
+    contactedAt?: string;
+    respondedAt?: string;
+    hiredAt?: string;
     outreachMessages: string[];
     tags?: string[];
     notes?: string;

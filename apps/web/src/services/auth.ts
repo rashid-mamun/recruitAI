@@ -56,6 +56,19 @@ export async function register(name: string, email: string, password: string): P
     return user;
 }
 
+export async function loginWithGoogle(credential: string): Promise<User> {
+    const res = await api.post('/api/auth/google', { credential });
+    const token = res.data?.token ?? res.data?.data?.token;
+    const user = normalizeUser(res.data);
+
+    if (!token) {
+        throw new Error('Google authentication failed');
+    }
+
+    localStorage.setItem(TOKEN_KEY, token);
+    return user;
+}
+
 export async function getMe(): Promise<User> {
     const res = await api.get('/api/auth/me');
     return normalizeUser(res.data);

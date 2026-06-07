@@ -106,7 +106,7 @@ export default function CandidateDetailsPage() {
     const [message, setMessage] = useState('');
     const [scoreProgress, setScoreProgress] = useState(0);
     const [outreachProgress, setOutreachProgress] = useState(0);
-    const [localResponses, setLocalResponses] = useState<LocalResponse[]>([]);
+    const [, setLocalResponses] = useState<LocalResponse[]>([]);
     const [animateScore, setAnimateScore] = useState(true);
 
     const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -381,7 +381,7 @@ export default function CandidateDetailsPage() {
         const text = combinedMessages
             .map(
                 (m) =>
-                    `[${formatTime(m.createdAt)}] ${m.direction === 'outbound' ? 'You (AI)' : candidate.name}: ${m.content}`,
+                    `[${formatTime(m.createdAt)}] ${m.role === 'ai' ? 'You (AI)' : candidate.name}: ${m.content}`,
             )
             .join('\n\n');
         const a = Object.assign(document.createElement('a'), {

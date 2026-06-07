@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getToken } from '@/services/auth';
+import { buildApiUrl } from '@/services/api';
 
 export type TaskStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
@@ -48,9 +49,8 @@ export function useTaskStream(taskId: string | null) {
 
         const connect = () => {
             const token = getToken();
-            const url = token
-                ? `/api/tasks/${taskId}/stream?token=${encodeURIComponent(token)}`
-                : `/api/tasks/${taskId}/stream`;
+            const path = `/api/tasks/${taskId}/stream`;
+            const url = buildApiUrl(token ? `${path}?token=${encodeURIComponent(token)}` : path);
 
             const es = new EventSource(url);
             esRef.current = es;
@@ -68,6 +68,7 @@ export function useTaskStream(taskId: string | null) {
                         progress: data.progress ?? 0,
                         result: data.result ?? null,
                         error: data.error ?? null,
+                        connectionState: 'connected',
                     });
 
                     if (data.status === 'completed' || data.status === 'failed') {
