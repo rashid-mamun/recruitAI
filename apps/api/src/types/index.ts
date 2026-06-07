@@ -31,6 +31,8 @@ export interface IUser {
     name: string;
     email: string;
     role: UserRole;
+    authProvider?: 'email' | 'google';
+    googleId?: string;
     password?: string;
     createdAt: Date;
     updatedAt: Date;
@@ -75,6 +77,10 @@ export interface ICandidate {
     starred?: boolean;
     status: CandidateStatus;
     score?: ICandidateScore;
+    scoredAt?: Date;
+    contactedAt?: Date;
+    respondedAt?: Date;
+    hiredAt?: Date;
     outreachMessages: string[];
     createdAt: Date;
     updatedAt: Date;

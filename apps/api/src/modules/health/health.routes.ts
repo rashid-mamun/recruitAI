@@ -4,6 +4,23 @@ import { redis } from '@/config/redis';
 
 const router: IRouter = Router();
 
+/**
+ * @swagger
+ * tags:
+ *   name: Health
+ *   description: System health and readiness checks
+ */
+
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: Basic health check
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: System is healthy
+ */
 router.get('/', (_req: Request, res: Response) => {
     res.json({
         success: true,
@@ -15,6 +32,18 @@ router.get('/', (_req: Request, res: Response) => {
     });
 });
 
+/**
+ * @swagger
+ * /api/health/ready:
+ *   get:
+ *     summary: Detailed readiness check (MongoDB & Redis)
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: System components are ready
+ *       503:
+ *         description: System components are not ready
+ */
 router.get('/ready', async (_req: Request, res: Response) => {
     const checks = {
         mongodb: false,

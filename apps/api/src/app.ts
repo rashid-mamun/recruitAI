@@ -53,7 +53,7 @@ export function createApp(): Application {
 
     app.use('/api/jobs', protect, jobRouter);
 
-    app.get('/api/queue-stats', async (_req, res) => {
+    app.get('/api/queue-stats', protect, async (_req, res) => {
         try {
             const stats = await Promise.all(
                 allQueues.map(async queue => {

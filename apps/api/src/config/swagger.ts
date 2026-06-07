@@ -5,10 +5,10 @@ const options: swaggerJsdoc.Options = {
     definition: {
         openapi: '3.0.0',
         info: {
-            title: 'Recruiting Automation API',
-            version: '1.0.0',
+            title: 'recruitAI API',
+            version: process.env.npm_package_version || '1.0.0',
             description:
-                'AI-powered recruiting automation system — manages jobs, sources candidates, scores them with AI, and automates outreach.',
+                'AI-powered recruiting automation with SSE streaming, multi-tier AI fallback, and fault-tolerant candidate sourcing',
             contact: {
                 name: 'API Support',
                 email: 'dev@recruiting.ai',
@@ -16,7 +16,46 @@ const options: swaggerJsdoc.Options = {
         },
         servers: [{ url: `http://localhost:${env.PORT}`, description: 'Development server' }],
         components: {
+            securitySchemes: {
+                bearerAuth: {
+                    type: 'http',
+                    scheme: 'bearer',
+                    bearerFormat: 'JWT',
+                },
+            },
             schemas: {
+                Score: {
+                    type: 'object',
+                    properties: {
+                        value: { type: 'number' },
+                        reasoning: { type: 'string' },
+                        strengths: { type: 'array', items: { type: 'string' } },
+                        weaknesses: { type: 'array', items: { type: 'string' } },
+                    },
+                },
+                OutreachResult: {
+                    type: 'object',
+                    properties: {
+                        message: { type: 'string' },
+                        generatedAt: { type: 'string', format: 'date-time' },
+                    },
+                },
+                IntentResult: {
+                    type: 'object',
+                    properties: {
+                        intent: { type: 'string', enum: ['interested', 'not_interested', 'maybe'] },
+                        confidence: { type: 'number' },
+                        reason: { type: 'string' },
+                    },
+                },
+                ErrorResponse: {
+                    type: 'object',
+                    properties: {
+                        success: { type: 'boolean', example: false },
+                        error: { type: 'string' },
+                        code: { type: 'string' },
+                    },
+                },
                 Job: {
                     type: 'object',
                     properties: {

@@ -13,8 +13,20 @@ const UserSchema = new Schema<IUserDocument>(
         },
         password: {
             type: String,
-            required: true,
+            required: function (this: IUserDocument) {
+                return this.authProvider !== 'google';
+            },
             select: false,
+        },
+        authProvider: {
+            type: String,
+            enum: ['email', 'google'],
+            default: 'email',
+        },
+        googleId: {
+            type: String,
+            sparse: true,
+            index: true,
         },
         name: {
             type: String,
