@@ -1,137 +1,100 @@
 services:
-    # ── MongoDB
     mongo:
         image: mongo:7
-        container_name: recruiting-mongo
         restart: unless-stopped
-        ports:
-            - '27017:27017'
         volumes:
             - mongo_data:/data/db
         environment:
             MONGO_INITDB_DATABASE: recruiting
         healthcheck:
             test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
-            interval: 10s
+            interval: 15s
             timeout: 5s
             retries: 5
 
-    # ── Redis
     redis:
         image: redis:7-alpine
-        container_name: recruiting-redis
         restart: unless-stopped
-        ports:
-            - '6379:6379'
+        command: redis-server --appendonly yes
         volumes:
             - redis_data:/data
-        command: redis-server --appendonly yes
         healthcheck:
             test: ['CMD', 'redis-cli', 'ping']
-            interval: 10s
+            interval: 15s
             timeout: 3s
             retries: 5
 
-    # ── Redis Commander (Redis GUI)
-    redis-commander:
-        image: rediscommander/redis-commander:latest
-        container_name: recruiting-redis-ui
-        profiles: ['debug']
-        restart: unless-stopped
-        ports:
-            - '8081:8081'
-        environment:
-            REDIS_HOSTS: local:redis:6379
-        depends_on:
-            redis:
-                condition: service_healthy
-
-    # ── API Server ───
     api:
         build:
             context: .
             dockerfile: apps/api/Dockerfile
-            target: development
-        container_name: recruiting-api
+            target: production
         restart: unless-stopped
-        ports:
-            - '5000:5000'
         env_file:
             - .env
         environment:
+            NODE_ENV: production
             MONGODB_URI: mongodb://mongo:27017/recruiting
             REDIS_HOST: redis
             REDIS_PORT: '6379'
-            # Compose runs the dedicated worker service below.
+            # This stack has a dedicated worker service.
             EMBEDDED_WORKERS: 'false'
-            FRONTEND_URL: http://localhost:5173
+            TRUST_PROXY: 'true'
+        ports:
+            - '5000:5000'
         volumes:
-            - .:/app
-            - /app/node_modules
-            - /app/apps/api/node_modules
             - storage_data:/tmp/recruitai-storage
         depends_on:
             mongo:
                 condition: service_healthy
             redis:
                 condition: service_healthy
-        command: pnpm run dev
         healthcheck:
             test:
                 [
                     'CMD-SHELL',
                     'wget -qO- http://localhost:5000/health/ready >/dev/null 2>&1 || exit 1',
                 ]
-            interval: 15s
+            interval: 20s
             timeout: 5s
             retries: 5
 
-    # ── Worker Process (separate from API!)
     worker:
         build:
             context: .
             dockerfile: apps/api/Dockerfile
-            target: development
-        container_name: recruiting-worker
+            target: production
         restart: unless-stopped
         env_file:
             - .env
         environment:
+            NODE_ENV: production
             MONGODB_URI: mongodb://mongo:27017/recruiting
             REDIS_HOST: redis
             REDIS_PORT: '6379'
         volumes:
-            - .:/app
-            - /app/node_modules
-            - /app/apps/api/node_modules
             - storage_data:/tmp/recruitai-storage
         depends_on:
             mongo:
                 condition: service_healthy
             redis:
                 condition: service_healthy
-            api:
-                condition: service_healthy
-        command: pnpm run dev:worker
+        command: node dist/worker.js
 
-    # ── React Web App
     web:
         build:
             context: .
             dockerfile: apps/web/Dockerfile
-            target: development
-        container_name: recruiting-web
+            target: production
+            args:
+                VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+                VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
         restart: unless-stopped
         ports:
-            - '5173:5173'
-        environment:
-            VITE_API_URL: http://localhost:5000
-            VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
-        volumes:
-            - .:/app
-            - /app/node_modules
-            - /app/apps/web/node_modules
-        command: pnpm run dev
+            - '80:80'
+        depends_on:
+            api:
+                condition: service_healthy
 
 volumes:
     mongo_data:

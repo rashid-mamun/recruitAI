@@ -1,64 +1,36 @@
-name: Production Build
+name: CI
 
 on:
   push:
-    branches: [ master, develop]
+    branches: [main]
   pull_request:
-    branches: [master]
 
 jobs:
-  typecheck:
-    name: Type check
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run typecheck
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  test:
-    name: Test (API)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @recruiting/api test
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-coverage
-          path: apps/api/coverage/
+          version: 9.15.9
 
-  build:
-    name: Build check
-    runs-on: ubuntu-latest
-    needs: [typecheck, test]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20.18.0'
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run build
 
-  docker:
-    name: Docker build check
-    runs-on: ubuntu-latest
-    needs: [build]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build API image
-        run: docker build -f apps/api/Dockerfile --target production .
-      - name: Build web image
-        run: docker build -f apps/web/Dockerfile --target production .
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
