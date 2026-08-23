@@ -50,4 +50,4 @@ RUN mkdir -p apps/api/node_modules/@ \
 WORKDIR /app/apps/api
 USER node
 EXPOSE 5000
-CMD ["sh", "-c", "if [ -z \"$REDIS_URL\" ] && { [ -z \"$REDIS_HOST\" ] || [ \"$REDIS_HOST\" = \"localhost\" ] || [ \"$REDIS_HOST\" = \"127.0.0.1\" ]; }; then redis-server --bind 127.0.0.1 --save '' --appendonly no & fi; exec node dist/server.js"]
+CMD ["sh", "-c", "if [ -z \"$REDIS_URL\" ] && { [ -z \"$REDIS_HOST\" ] || [ \"$REDIS_HOST\" = \"localhost\" ] || [ \"$REDIS_HOST\" = \"127.0.0.1\" ]; }; then export REDIS_SOCKET=${REDIS_SOCKET:-/tmp/recruitai-redis.sock}; redis-server --port 0 --unixsocket \"$REDIS_SOCKET\" --unixsocketperm 700 --save '' --appendonly no & fi; exec node dist/server.js"]

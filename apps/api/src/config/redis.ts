@@ -11,8 +11,14 @@ const redisConfig = {
     lazyConnect: false,
 };
 
-const createRedisConnection = () =>
-    env.REDIS_URL ? new Redis(env.REDIS_URL, redisConfig) : new Redis(redisConfig);
+export const createRedisConnection = () => {
+    if (env.REDIS_URL) return new Redis(env.REDIS_URL, redisConfig);
+    if (env.REDIS_SOCKET) {
+        const { host: _host, port: _port, ...socketConfig } = redisConfig;
+        return new Redis({ ...socketConfig, path: env.REDIS_SOCKET });
+    }
+    return new Redis(redisConfig);
+};
 
 export const redis = createRedisConnection();
 

@@ -2,6 +2,7 @@ import { createApp } from '@/app';
 import { connectDB, disconnectDB } from '@/config/db';
 import { env } from '@/config/env';
 import { logger } from '@/config/logger';
+import { redis } from '@/config/redis';
 
 import { startTaskSubscriber } from '@/services/pubsub.service';
 import { startSourcingWorker } from '@/workers/sourcing.worker';
@@ -24,6 +25,15 @@ async function bootstrap() {
           ]
         : [];
 
+    let heartbeatTimer: NodeJS.Timeout | undefined;
+    if (env.EMBEDDED_WORKERS) {
+        const heartbeat = async () => {
+            await redis.setex('worker:heartbeat', 45, new Date().toISOString());
+        };
+        await heartbeat();
+        heartbeatTimer = setInterval(() => void heartbeat(), 15_000);
+    }
+
     const app = createApp();
     const server = app.listen(env.PORT, () => {
         logger.info(`🚀  API server running on http://localhost:${env.PORT}`);
@@ -34,6 +44,11 @@ async function bootstrap() {
 
     const shutdown = async (signal: string) => {
         logger.info(`${signal} received — shutting down gracefully`);
+
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            await redis.del('worker:heartbeat');
+        }
 
         server.close(async () => {
             await Promise.allSettled(localWorkers.map(worker => worker.close()));
