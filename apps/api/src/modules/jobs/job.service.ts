@@ -3,20 +3,24 @@ import { Job } from './job.model';
 import { Candidate } from '@/modules/candidates/candidate.model';
 import { Message } from '@/modules/candidates/message.model';
 import { NotFoundError } from '@/middleware/errorHandler';
+import { organizationFilter, organizationObjectId } from '@/utils/tenant';
 import { cacheGet, cacheSet, cacheDel, cacheDelPattern, CacheKeys, CacheTTL } from '@/config/redis';
 import type { CreateJobDto, UpdateJobDto, JobQueryDto } from './job.schema';
 import type { IJob } from '@/types';
 
-export async function createJob(dto: CreateJobDto): Promise<IJob> {
-    const job = await Job.create(dto);
+export async function createJob(dto: CreateJobDto, organizationId?: string): Promise<IJob> {
+    const job = await Job.create({
+        ...dto,
+        organizationId: organizationObjectId(organizationId) ?? null,
+    });
     await cacheDelPattern('candidates:*');
     return job.toJSON() as unknown as IJob;
 }
 
-export async function listJobs(query: JobQueryDto) {
+export async function listJobs(query: JobQueryDto, organizationId?: string) {
     const { page, limit, status, search, sort } = query;
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { ...organizationFilter(organizationId) };
     if (status) filter.status = status;
     if (search) filter.$text = { $search: search };
 
@@ -35,7 +39,7 @@ export async function listJobs(query: JobQueryDto) {
     const jobIds = jobs.map(job => job._id);
 
     const [candidates, messages] = await Promise.all([
-        Candidate.find({ jobId: { $in: jobIds } }).lean(),
+        Candidate.find({ ...organizationFilter(organizationId), jobId: { $in: jobIds } }).lean(),
         Message.find({ jobId: { $in: jobIds }, role: 'candidate' })
             .select('candidateId jobId')
             .lean(),
@@ -69,7 +73,14 @@ export async function listJobs(query: JobQueryDto) {
         const sourced = cands.length;
         const scored = cands.filter(c => c.score?.value > 0).length;
         const contacted = cands.filter(c =>
-            ['contacted', 'interested', 'not_interested', 'hired'].includes(c.status)
+            [
+                'contacted',
+                'responded',
+                'interested',
+                'scheduling',
+                'not_interested',
+                'hired',
+            ].includes(c.status)
         ).length;
         const interested = cands.filter(c => c.status === 'interested').length;
         const hired = cands.filter(c => c.status === 'hired').length;
@@ -112,46 +123,57 @@ export async function listJobs(query: JobQueryDto) {
     };
 }
 
-export async function getJobById(id: string): Promise<IJob> {
-    const cached = await cacheGet<IJob>(CacheKeys.job(id));
+export async function getJobById(id: string, organizationId?: string): Promise<IJob> {
+    const tenantId = organizationId ?? 'missing';
+    const cached = await cacheGet<IJob>(CacheKeys.job(tenantId, id));
     if (cached) return cached;
 
-    const job = await Job.findById(id).lean();
+    const job = await Job.findOne({ _id: id, ...organizationFilter(organizationId) }).lean();
     if (!job) throw new NotFoundError('Job');
 
-    await cacheSet(CacheKeys.job(id), job, CacheTTL.JOB);
+    await cacheSet(CacheKeys.job(tenantId, id), job, CacheTTL.JOB);
     return job as unknown as IJob;
 }
 
-export async function updateJob(id: string, dto: UpdateJobDto): Promise<IJob> {
-    const job = await Job.findByIdAndUpdate(
-        id,
+export async function updateJob(
+    id: string,
+    dto: UpdateJobDto,
+    organizationId?: string
+): Promise<IJob> {
+    const job = await Job.findOneAndUpdate(
+        { _id: id, ...organizationFilter(organizationId) },
         { $set: dto },
         { new: true, runValidators: true }
     ).lean();
 
     if (!job) throw new NotFoundError('Job');
 
-    await cacheDel(CacheKeys.job(id));
+    await cacheDel(CacheKeys.job(organizationId ?? 'missing', id));
     return job as unknown as IJob;
 }
 
-export async function deleteJob(id: string): Promise<void> {
-    const job = await Job.findByIdAndUpdate(id, { deletedAt: new Date() }).lean();
+export async function deleteJob(id: string, organizationId?: string): Promise<void> {
+    const job = await Job.findOneAndUpdate(
+        { _id: id, ...organizationFilter(organizationId) },
+        { deletedAt: new Date() }
+    ).lean();
     if (!job) throw new NotFoundError('Job');
-    await cacheDel(CacheKeys.job(id));
+    await cacheDel(CacheKeys.job(organizationId ?? 'missing', id));
 }
 
 /**
  * Get pipeline funnel stats for a job
  * Returns counts of candidates at each pipeline stage
  */
-export async function getJobStats(jobId: string) {
-    const job = await Job.findById(jobId).lean();
+export async function getJobStats(jobId: string, organizationId?: string) {
+    const job = await Job.findOne({ _id: jobId, ...organizationFilter(organizationId) }).lean();
     if (!job) throw new NotFoundError('Job');
 
     const [candidates, messages] = await Promise.all([
-        Candidate.find({ jobId: new mongoose.Types.ObjectId(jobId) }).lean(),
+        Candidate.find({
+            ...organizationFilter(organizationId),
+            jobId: new mongoose.Types.ObjectId(jobId),
+        }).lean(),
         Message.find({ jobId: new mongoose.Types.ObjectId(jobId), role: 'candidate' })
             .select('candidateId')
             .lean(),
@@ -160,9 +182,16 @@ export async function getJobStats(jobId: string) {
     const total = candidates.length;
     const scored = candidates.filter(c => (c as any).score?.value > 0).length;
     const contacted = candidates.filter(c =>
-        ['contacted', 'interested', 'not_interested', 'hired'].includes((c as any).status)
+        ['contacted', 'responded', 'interested', 'scheduling', 'not_interested', 'hired'].includes(
+            (c as any).status
+        )
     ).length;
-    const interested = candidates.filter(c => (c as any).status === 'interested').length;
+    // Funnel stages are cumulative. A hired candidate necessarily passed through
+    // interested/scheduling, so keeping only the current status makes impossible
+    // funnels such as "0 interested → 1 hired".
+    const interested = candidates.filter(c =>
+        ['interested', 'scheduling', 'hired'].includes((c as any).status)
+    ).length;
     const not_interested = candidates.filter(c => (c as any).status === 'not_interested').length;
     const hired = candidates.filter(c => (c as any).status === 'hired').length;
 
@@ -196,8 +225,11 @@ export async function getJobStats(jobId: string) {
 /**
  * Duplicate a job — clone title/description/requirements, set status=paused
  */
-export async function duplicateJob(jobId: string): Promise<IJob> {
-    const original = await Job.findById(jobId).lean();
+export async function duplicateJob(jobId: string, organizationId?: string): Promise<IJob> {
+    const original = await Job.findOne({
+        _id: jobId,
+        ...organizationFilter(organizationId),
+    }).lean();
     if (!original) throw new NotFoundError('Job');
 
     const cloned = await Job.create({
@@ -208,6 +240,8 @@ export async function duplicateJob(jobId: string): Promise<IJob> {
         type: (original as any).type ?? 'full-time',
         status: 'paused',
         sourcingQueries: (original as any).sourcingQueries ?? [],
+        organizationId:
+            (original as any).organizationId ?? organizationObjectId(organizationId) ?? null,
     });
 
     return cloned.toJSON() as unknown as IJob;

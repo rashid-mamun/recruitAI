@@ -7,13 +7,7 @@ import './index.css';
 
 const THEME_KEY = 'recruit-ai-theme';
 const storedTheme = localStorage.getItem(THEME_KEY);
-const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-const initialTheme =
-    storedTheme === 'light' || storedTheme === 'dark'
-        ? storedTheme
-        : systemPrefersDark
-          ? 'dark'
-          : 'light';
+const initialTheme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'dark';
 
 document.documentElement.dataset.theme = initialTheme;
 localStorage.setItem(THEME_KEY, initialTheme);
@@ -36,7 +30,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <QueryClientProvider client={queryClient}>
             <App />
-            <ReactQueryDevtools initialIsOpen={false} />
+            {import.meta.env.VITE_QUERY_DEVTOOLS === 'true' && (
+                <ReactQueryDevtools initialIsOpen={false} />
+            )}
         </QueryClientProvider>
     </React.StrictMode>,
 );

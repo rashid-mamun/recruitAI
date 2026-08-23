@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '@/config/logger';
 import { ZodError } from 'zod';
+import { reportUnexpectedError } from '@/services/error-monitor.service';
 
 export class AppError extends Error {
     public readonly statusCode: number;
@@ -29,8 +30,8 @@ export class ValidationError extends AppError {
 }
 
 export class ConflictError extends AppError {
-    constructor(message: string) {
-        super(message, 409, 'CONFLICT');
+    constructor(message: string, code = 'CONFLICT') {
+        super(message, 409, code);
     }
 }
 
@@ -69,9 +70,25 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
         return;
     }
 
+    if (err.message === 'Not allowed by CORS') {
+        res.status(403).json({
+            success: false,
+            error: 'Origin is not allowed by CORS policy',
+            code: 'CORS_NOT_ALLOWED',
+        });
+        return;
+    }
+
     logger.error('Unexpected error', {
         error: err.message,
         stack: err.stack,
+        path: req.path,
+        method: req.method,
+    });
+    reportUnexpectedError({
+        message: err.message,
+        stack: err.stack,
+        correlationId: req.correlationId,
         path: req.path,
         method: req.method,
     });

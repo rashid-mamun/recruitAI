@@ -1,7 +1,9 @@
 # ─── API Dockerfile ──
 FROM node:20-alpine AS base
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+RUN apk add --no-cache redis \
+    && corepack enable \
+    && corepack prepare pnpm@9.0.0 --activate
 
 # Copy workspace manifests first for better layer caching.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
@@ -24,7 +26,9 @@ RUN pnpm --filter @recruiting/api build
 # ─── Production stage
 FROM node:20-alpine AS production
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+RUN apk add --no-cache redis \
+    && corepack enable \
+    && corepack prepare pnpm@9.0.0 --activate
 ENV NODE_ENV=production
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -46,4 +50,4 @@ RUN mkdir -p apps/api/node_modules/@ \
 WORKDIR /app/apps/api
 USER node
 EXPOSE 5000
-CMD ["node", "dist/server.js"]
+CMD ["sh", "-c", "if [ -z \"$REDIS_URL\" ] && { [ -z \"$REDIS_HOST\" ] || [ \"$REDIS_HOST\" = \"localhost\" ] || [ \"$REDIS_HOST\" = \"127.0.0.1\" ]; }; then redis-server --bind 127.0.0.1 --save '' --appendonly no & fi; exec node dist/server.js"]

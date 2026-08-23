@@ -1,9 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Briefcase, Users, Zap, Clock, X, ArrowRight } from 'lucide-react';
+import {
+    Search,
+    Briefcase,
+    Users,
+    Zap,
+    Clock,
+    X,
+    ArrowRight,
+    FileText,
+    MessagesSquare,
+} from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { getJobs, getCandidates } from '@/services/api';
-import type { Job, Candidate } from '@/types';
+import { getJobs, globalSearch } from '@/services/api';
+import type { Job } from '@/types';
 
 interface CommandPaletteProps {
     isOpen: boolean;
@@ -59,18 +69,23 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
         staleTime: 30_000,
     });
 
-    const { data: candidatesData } = useQuery({
-        queryKey: ['candidates-search', query],
-        queryFn: () => getCandidates({ search: query, limit: 6 }),
-        enabled: isOpen && query.trim().length >= 1,
+    const { data: searchResults } = useQuery({
+        queryKey: ['global-search', query],
+        queryFn: () => globalSearch(query),
+        enabled: isOpen && query.trim().length >= 2,
         staleTime: 10_000,
     });
 
-    const candidates: Candidate[] = candidatesData?.data ?? [];
+    const candidates = searchResults?.candidates ?? [];
+    const searchedJobs = searchResults?.jobs ?? [];
+    const interviews = searchResults?.interviews ?? [];
+    const reports = searchResults?.reports ?? [];
 
     const q = query.toLowerCase();
 
-    const filteredJobs = q ? jobs.filter((j) => j.title.toLowerCase().includes(q)).slice(0, 5) : [];
+    const filteredJobs = q
+        ? searchedJobs
+        : jobs.filter((j) => j.title.toLowerCase().includes(q)).slice(0, 5);
 
     useEffect(() => {
         if (isOpen) {
@@ -129,6 +144,22 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
             sub: c.headline,
             go: () => {
                 navigate(`/candidates/${c._id}`);
+                onClose();
+            },
+        })),
+        ...interviews.map((interview) => ({
+            label: interview.title,
+            sub: 'Interview',
+            go: () => {
+                navigate(`/interviews/${interview._id}`);
+                onClose();
+            },
+        })),
+        ...reports.map((report) => ({
+            label: report.title,
+            sub: 'Candidate report',
+            go: () => {
+                navigate(`/candidates/${report.candidateId}`);
                 onClose();
             },
         })),
@@ -326,6 +357,59 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
                         </Section>
                     )}
 
+                    {interviews.length > 0 && (
+                        <Section label="Interviews">
+                            {interviews.map((interview, i) => {
+                                const idx =
+                                    QUICK_ACTIONS.length +
+                                    filteredJobs.length +
+                                    candidates.length +
+                                    i;
+                                return (
+                                    <ResultRow
+                                        key={interview._id}
+                                        icon={<MessagesSquare size={15} />}
+                                        label={interview.title}
+                                        sub={interview.status}
+                                        active={activeIdx === idx}
+                                        onHover={() => setActiveIdx(idx)}
+                                        onClick={() => {
+                                            navigate(`/interviews/${interview._id}`);
+                                            onClose();
+                                        }}
+                                    />
+                                );
+                            })}
+                        </Section>
+                    )}
+
+                    {reports.length > 0 && (
+                        <Section label="Reports">
+                            {reports.map((report, i) => {
+                                const idx =
+                                    QUICK_ACTIONS.length +
+                                    filteredJobs.length +
+                                    candidates.length +
+                                    interviews.length +
+                                    i;
+                                return (
+                                    <ResultRow
+                                        key={report._id}
+                                        icon={<FileText size={15} />}
+                                        label={report.title}
+                                        sub="Candidate report"
+                                        active={activeIdx === idx}
+                                        onHover={() => setActiveIdx(idx)}
+                                        onClick={() => {
+                                            navigate(`/candidates/${report.candidateId}`);
+                                            onClose();
+                                        }}
+                                    />
+                                );
+                            })}
+                        </Section>
+                    )}
+
                     {!q && recent.length > 0 && (
                         <Section label="Recent">
                             {recent.map((r, i) => {
@@ -333,6 +417,8 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
                                     QUICK_ACTIONS.length +
                                     filteredJobs.length +
                                     candidates.length +
+                                    interviews.length +
+                                    reports.length +
                                     i;
                                 return (
                                     <ResultRow

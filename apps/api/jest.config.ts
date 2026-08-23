@@ -17,6 +17,7 @@ export default {
         'src/modules/jobs/job.routes.ts',
     ],
     coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
+    modulePathIgnorePatterns: ['<rootDir>/dist'],
     coverageThreshold: {
         global: { lines: 65, functions: 60 },
     },

@@ -279,6 +279,38 @@
   justify-content: center;
   padding: 7px 0;
 }
+
+.sidebar-logout {
+    width: 100%;
+    min-height: 36px;
+    margin-top: 6px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.sidebar-logout:hover {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.sidebar-logout.collapsed {
+    width: 36px;
+    margin-inline: auto;
+    padding: 8px;
+}
 .user-avatar {
   width: 30px;
   height: 30px;

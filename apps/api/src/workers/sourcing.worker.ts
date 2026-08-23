@@ -4,6 +4,7 @@ import pLimit from 'p-limit';
 import { bullRedis } from '@/config/redis';
 import { logger } from '@/config/logger';
 import { Candidate } from '@/modules/candidates/candidate.model';
+import { Job as JobModel } from '@/modules/jobs/job.model';
 import { createSourcingProvider } from '@/modules/sourcing/providers/provider.factory';
 import { mockProvider } from '@/modules/sourcing/providers/mock.provider';
 import { duckduckgoProvider } from '@/modules/sourcing/providers/duckduckgo.provider';
@@ -36,6 +37,10 @@ export function startSourcingWorker(): Worker {
 
             await markProcessing(taskId, job.id ?? '');
             await job.updateProgress(5);
+
+            const sourceJob = await JobModel.findById(jobId).select('organizationId').lean();
+            if (!sourceJob?.organizationId) throw new Error('Sourcing workspace was not found');
+            const organizationId = sourceJob.organizationId;
 
             let rawCandidates;
             let resolvedProviderName = provider.name;
@@ -98,6 +103,7 @@ export function startSourcingWorker(): Worker {
                     limit$(async () => {
                         try {
                             const filter = {
+                                organizationId,
                                 jobId: new mongoose.Types.ObjectId(jobId),
                                 linkedinUrl: raw.linkedinUrl,
                             };
@@ -105,6 +111,7 @@ export function startSourcingWorker(): Worker {
                             if (!existing) {
                                 const result = await Candidate.create({
                                     ...raw,
+                                    organizationId,
                                     jobId: new mongoose.Types.ObjectId(jobId),
                                     source: resolvedProviderName,
                                     status: 'sourced',
@@ -130,7 +137,12 @@ export function startSourcingWorker(): Worker {
             if (newCandidateIds.length > 0) {
                 await Promise.all(
                     newCandidateIds.map(async candidateId => {
-                        const scoreTask = await createTask({ type: 'scoring', jobId, candidateId });
+                        const scoreTask = await createTask({
+                            type: 'scoring',
+                            organizationId: organizationId.toString(),
+                            jobId,
+                            candidateId,
+                        });
                         const scoreTaskId = scoreTask._id.toString(); // Must be string for BullMQ
                         await scoringQueue.add(
                             'score-candidate',

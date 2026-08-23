@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { AppNotification, NotificationType } from '@/types';
+import { api } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface NotificationContextValue {
     notifications: AppNotification[];
@@ -12,53 +14,51 @@ interface NotificationContextValue {
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 
-const STORAGE_KEY = 'recruit-ai-notifications';
-
-function load(): AppNotification[] {
-    try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    } catch {
-        return [];
-    }
-}
-
-function save(items: AppNotification[]) {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, 50)));
-    } catch {}
-}
-
 export function NotificationProvider({ children }: { children: ReactNode }) {
-    const [notifications, setNotifications] = useState<AppNotification[]>(load);
+    const [notifications, setNotifications] = useState<AppNotification[]>([]);
+    const { isAuthenticated } = useAuth();
 
     useEffect(() => {
-        save(notifications);
-    }, [notifications]);
+        if (!isAuthenticated) {
+            setNotifications([]);
+            return;
+        }
+        let active = true;
+        api.get('/api/notifications')
+            .then((response) => {
+                if (!active) return;
+                setNotifications((response.data.data ?? []).map(normalizeNotification));
+            })
+            .catch(() => undefined);
+        return () => {
+            active = false;
+        };
+    }, [isAuthenticated]);
 
     const addNotification = useCallback(
         (type: NotificationType, message: string, link?: string) => {
-            const item: AppNotification = {
-                id: crypto.randomUUID(),
-                type,
-                message,
-                link,
-                read: false,
-                createdAt: new Date().toISOString(),
-            };
-            setNotifications((prev) => [item, ...prev].slice(0, 50));
+            void api.post('/api/notifications', { type, message, link }).then((response) => {
+                const item = normalizeNotification(response.data.data);
+                setNotifications((prev) => [item, ...prev].slice(0, 100));
+            });
         },
         [],
     );
 
     const markRead = useCallback((id: string) => {
         setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+        void api.patch(`/api/notifications/${id}/read`);
     }, []);
 
     const markAllRead = useCallback(() => {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        void api.patch('/api/notifications/read-all');
     }, []);
 
-    const clearAll = useCallback(() => setNotifications([]), []);
+    const clearAll = useCallback(() => {
+        setNotifications([]);
+        void api.delete('/api/notifications');
+    }, []);
 
     const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -69,6 +69,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             {children}
         </NotificationContext.Provider>
     );
+}
+
+function normalizeNotification(value: any): AppNotification {
+    return {
+        id: value._id ?? value.id,
+        type: value.type,
+        message: value.message,
+        link: value.link ?? undefined,
+        read: Boolean(value.read),
+        createdAt: value.createdAt,
+    };
 }
 
 export function useNotifications() {

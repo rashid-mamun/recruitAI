@@ -32,6 +32,9 @@ jest.mock('@/config/ai', () => ({
 jest.mock('@/services/email.service', () => ({
     sendTaskCompletedEmail: jest.fn(),
     sendTaskFailedEmail: jest.fn(),
+    sendPublicLeadEmail: jest.fn(),
+    sendPasswordResetEmail: jest.fn(),
+    sendTransactionalEmail: jest.fn().mockResolvedValue({ provider: 'preview' }),
 }));
 
 let mongoServer: MongoMemoryServer;

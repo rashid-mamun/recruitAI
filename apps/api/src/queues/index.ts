@@ -21,6 +21,13 @@ export interface OutreachJobData {
     jobId: string;
 }
 
+export interface InterviewAnalysisJobData {
+    taskId: string;
+    interviewId: string;
+    candidateId: string;
+    jobId: string;
+}
+
 const defaultJobOptions = {
     attempts: 3,
     backoff: {
@@ -52,4 +59,12 @@ export const outreachQueue = new Queue<OutreachJobData>('outreach', {
     },
 });
 
-export const allQueues = [sourcingQueue, scoringQueue, outreachQueue];
+export const interviewAnalysisQueue = new Queue<InterviewAnalysisJobData>('interview-analysis', {
+    connection: bullRedis,
+    defaultJobOptions: {
+        ...defaultJobOptions,
+        attempts: 2,
+    },
+});
+
+export const allQueues = [sourcingQueue, scoringQueue, outreachQueue, interviewAnalysisQueue];

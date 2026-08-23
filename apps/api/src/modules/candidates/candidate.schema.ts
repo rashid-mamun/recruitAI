@@ -29,6 +29,7 @@ export const candidateQuerySchema = z.object({
     page: z.coerce.number().min(1).default(1),
     limit: z.coerce.number().min(1).max(100).default(20),
     status: z.enum(CANDIDATE_STATUSES).optional(),
+    stage: z.enum(['sourced', 'scored', 'contacted', 'interested', 'hired']).optional(),
     sort: z
         .enum(['-score', 'score', '-createdAt', 'createdAt', '-updatedAt', 'name'])
         .default('-createdAt'),
@@ -83,9 +84,31 @@ export const updateCandidateSchema = z
         tags: z.array(z.string()).optional(),
         notes: z.string().optional(),
         starred: z.boolean().optional(),
+        name: z.string().trim().min(1).max(160).optional(),
+        email: z.string().trim().email().nullable().optional(),
+        phone: z.string().trim().max(50).optional(),
+        headline: z.string().trim().max(300).optional(),
+        summary: z.string().max(10000).optional(),
+        skills: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
+        experience: z.string().max(10000).optional(),
+        location: z.string().trim().max(200).optional(),
+        currentCompany: z.string().trim().max(200).optional(),
+        currentTitle: z.string().trim().max(200).optional(),
+        linkedinUrl: z.string().url().optional(),
+        portfolioUrl: z.union([z.string().url(), z.literal('')]).optional(),
+        githubUrl: z.union([z.string().url(), z.literal('')]).optional(),
+        sourceDetails: z.record(z.unknown()).optional(),
+        consentStatus: z.enum(['unknown', 'granted', 'withdrawn']).optional(),
+        privacyRegion: z.string().trim().max(80).optional(),
+        ownerUserId: z.string().nullable().optional(),
+        assignedRecruiterIds: z.array(z.string()).max(100).optional(),
     })
     .strict();
 export type UpdateCandidateDto = z.infer<typeof updateCandidateSchema>;
+
+export const mergeCandidateSchema = z.object({
+    duplicateCandidateId: z.string().regex(/^[a-f\d]{24}$/i),
+});
 
 /**
  * Body schema for outreach request

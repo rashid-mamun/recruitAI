@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { asyncHandler } from '@/middleware/errorHandler';
 import { sourcingQueue } from '@/queues';
 import { createTask } from '@/modules/tasks/task.service';
+import { Job } from '@/modules/jobs/job.model';
+import { ConflictError, NotFoundError } from '@/middleware/errorHandler';
+import { getAuthUser, organizationFilter } from '@/utils/tenant';
 
 const router: IRouter = Router({ mergeParams: true });
 
@@ -39,9 +42,24 @@ router.post(
         const { jobId } = req.params;
         const { query, limit } = sourcingBodySchema.parse(req.body);
 
+        const job = await Job.findOne({
+            _id: jobId,
+            ...organizationFilter(getAuthUser(req).organizationId),
+        })
+            .select('status')
+            .lean();
+        if (!job) throw new NotFoundError('Job');
+        if (job.status !== 'active') {
+            throw new ConflictError('Resume this role before starting background sourcing.');
+        }
+
         const searchQuery = query ?? `${jobId} developer`;
 
-        const task = await createTask({ type: 'sourcing', jobId });
+        const task = await createTask({
+            type: 'sourcing',
+            organizationId: getAuthUser(req).organizationId,
+            jobId,
+        });
 
         await sourcingQueue.add(
             'source-candidates',

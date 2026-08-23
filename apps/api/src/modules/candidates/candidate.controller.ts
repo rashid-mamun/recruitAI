@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '@/middleware/errorHandler';
+import { recordAuditLog } from '@/modules/audit/audit.service';
 import * as CandidateService from './candidate.service';
 import {
     candidateQuerySchema,
@@ -7,7 +8,9 @@ import {
     updateCandidateSchema,
     outreachBodySchema,
     responseBodySchema,
+    mergeCandidateSchema,
 } from './candidate.schema';
+import { getAuthUser } from '@/utils/tenant';
 
 /**
  * List candidates for a specific job
@@ -15,7 +18,11 @@ import {
 export const listCandidates = asyncHandler(async (req: Request, res: Response) => {
     const { jobId } = req.params;
     const query = candidateQuerySchema.parse(req.query);
-    const result = await CandidateService.listCandidates(jobId, query);
+    const result = await CandidateService.listCandidates(
+        jobId,
+        query,
+        getAuthUser(req).organizationId
+    );
     res.json({ success: true, ...result });
 });
 
@@ -24,7 +31,7 @@ export const listCandidates = asyncHandler(async (req: Request, res: Response) =
  */
 export const listAllCandidates = asyncHandler(async (req: Request, res: Response) => {
     const query = globalCandidateQuerySchema.parse(req.query);
-    const result = await CandidateService.listAllCandidates(query);
+    const result = await CandidateService.listAllCandidates(query, getAuthUser(req).organizationId);
     res.json({
         success: true,
         ...result,
@@ -39,8 +46,60 @@ export const listAllCandidates = asyncHandler(async (req: Request, res: Response
  * Get candidate by ID
  */
 export const getById = asyncHandler(async (req: Request, res: Response) => {
-    const candidate = await CandidateService.getCandidateById(req.params.id);
+    const candidate = await CandidateService.getCandidateById(
+        req.params.id,
+        getAuthUser(req).organizationId
+    );
     res.json({ success: true, data: candidate });
+});
+
+export const listDuplicates = asyncHandler(async (req: Request, res: Response) => {
+    const candidates = await CandidateService.findCandidateDuplicates(
+        req.params.id,
+        getAuthUser(req).organizationId!
+    );
+    res.json({ success: true, data: candidates });
+});
+
+export const mergeCandidate = asyncHandler(async (req: Request, res: Response) => {
+    const { duplicateCandidateId } = mergeCandidateSchema.parse(req.body);
+    const candidate = await CandidateService.mergeCandidates(
+        req.params.id,
+        duplicateCandidateId,
+        getAuthUser(req).organizationId!
+    );
+    await recordAuditLog({
+        req,
+        action: 'candidate.merged',
+        resourceType: 'candidate',
+        resourceId: req.params.id,
+        after: { duplicateCandidateId },
+    });
+    res.json({ success: true, data: candidate });
+});
+
+export const exportCandidate = asyncHandler(async (req: Request, res: Response) => {
+    const data = await CandidateService.exportCandidateData(
+        req.params.id,
+        getAuthUser(req).organizationId!
+    );
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="candidate-${req.params.id}.json"`);
+    res.json({ success: true, data });
+});
+
+export const deleteCandidate = asyncHandler(async (req: Request, res: Response) => {
+    await CandidateService.getCandidateById(req.params.id, getAuthUser(req).organizationId);
+    await CandidateService.deleteCandidateData(req.params.id, getAuthUser(req).organizationId!);
+    await recordAuditLog({
+        req,
+        action: 'candidate.privacy_deleted',
+        resourceType: 'candidate',
+        resourceId: req.params.id,
+        before: { existed: true },
+        after: { deleted: true },
+    });
+    res.status(204).send();
 });
 
 /**
@@ -48,7 +107,33 @@ export const getById = asyncHandler(async (req: Request, res: Response) => {
  */
 export const updateCandidate = asyncHandler(async (req: Request, res: Response) => {
     const dto = updateCandidateSchema.parse(req.body);
-    const candidate = await CandidateService.updateCandidateById(req.params.id, dto);
+    const before = await CandidateService.getCandidateById(
+        req.params.id,
+        getAuthUser(req).organizationId
+    );
+    const candidate = await CandidateService.updateCandidateById(
+        req.params.id,
+        dto,
+        getAuthUser(req).organizationId
+    );
+    await recordAuditLog({
+        req,
+        action: 'candidate.updated',
+        resourceType: 'candidate',
+        resourceId: req.params.id,
+        before: {
+            status: before.status,
+            tags: before.tags,
+            notes: before.notes,
+            starred: before.starred,
+        },
+        after: {
+            status: candidate.status,
+            tags: candidate.tags,
+            notes: candidate.notes,
+            starred: candidate.starred,
+        },
+    });
     res.json({ success: true, data: candidate });
 });
 
@@ -57,7 +142,11 @@ export const updateCandidate = asyncHandler(async (req: Request, res: Response) 
  */
 export const score = asyncHandler(async (req: Request, res: Response) => {
     const forceRefresh = req.query.refresh === 'true';
-    const result = await CandidateService.scoreCandidate(req.params.id, forceRefresh);
+    const result = await CandidateService.scoreCandidate(
+        req.params.id,
+        forceRefresh,
+        getAuthUser(req).organizationId
+    );
 
     if ('cached' in result) {
         res.json({ success: true, data: result.score, cached: true });
@@ -72,7 +161,11 @@ export const score = asyncHandler(async (req: Request, res: Response) => {
  */
 export const sendOutreach = asyncHandler(async (req: Request, res: Response) => {
     const { jobId } = outreachBodySchema.parse(req.body);
-    const result = await CandidateService.sendOutreach(req.params.id, jobId);
+    const result = await CandidateService.sendOutreach(
+        req.params.id,
+        jobId,
+        getAuthUser(req).organizationId
+    );
     res.status(202).json({ success: true, data: result });
 });
 
@@ -81,7 +174,11 @@ export const sendOutreach = asyncHandler(async (req: Request, res: Response) => 
  */
 export const classifyResponse = asyncHandler(async (req: Request, res: Response) => {
     const { message } = responseBodySchema.parse(req.body);
-    const result = await CandidateService.classifyResponse(req.params.id, message);
+    const result = await CandidateService.classifyResponse(
+        req.params.id,
+        message,
+        getAuthUser(req).organizationId
+    );
     res.json({ success: true, data: result });
 });
 
@@ -89,6 +186,9 @@ export const classifyResponse = asyncHandler(async (req: Request, res: Response)
  * Get all messages for a candidate
  */
 export const getMessages = asyncHandler(async (req: Request, res: Response) => {
-    const messages = await CandidateService.getCandidateMessages(req.params.id);
+    const messages = await CandidateService.getCandidateMessages(
+        req.params.id,
+        getAuthUser(req).organizationId
+    );
     res.json({ success: true, data: messages });
 });

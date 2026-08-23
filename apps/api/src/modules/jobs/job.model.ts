@@ -3,6 +3,12 @@ import type { IJobDocument, JobType, JobStatus } from '@/types';
 
 const JobSchema = new Schema<IJobDocument>(
     {
+        organizationId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Organization',
+            default: null,
+            index: true,
+        },
         title: {
             type: String,
             required: [true, 'Job title is required'],
@@ -50,6 +56,7 @@ const JobSchema = new Schema<IJobDocument>(
 );
 
 JobSchema.index({ status: 1 });
+JobSchema.index({ organizationId: 1, status: 1, createdAt: -1 });
 JobSchema.index({ createdAt: -1 });
 JobSchema.index({ title: 'text', description: 'text' });
 

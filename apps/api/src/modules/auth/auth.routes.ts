@@ -1,6 +1,7 @@
 import { Router, IRouter } from 'express';
 import * as AuthController from './auth.controller';
 import { protect } from '@/middleware/authHandler';
+import { authLimiter } from '@/middleware/rateLimiters';
 
 const router: IRouter = Router();
 
@@ -46,7 +47,7 @@ const router: IRouter = Router();
  *       409:
  *         description: User already exists
  */
-router.post('/register', AuthController.register);
+router.post('/register', authLimiter, AuthController.register);
 
 /**
  * @swagger
@@ -77,7 +78,9 @@ router.post('/register', AuthController.register);
  *       401:
  *         description: Invalid credentials
  */
-router.post('/login', AuthController.login);
+router.post('/login', authLimiter, AuthController.login);
+router.post('/password-reset/request', authLimiter, AuthController.requestPasswordReset);
+router.post('/password-reset/confirm', authLimiter, AuthController.confirmPasswordReset);
 
 /**
  * @swagger
@@ -102,7 +105,10 @@ router.post('/login', AuthController.login);
  *       401:
  *         description: Invalid Google credential
  */
-router.post('/google', AuthController.googleLogin);
+router.post('/google', authLimiter, AuthController.googleLogin);
+router.post('/refresh', authLimiter, AuthController.refresh);
+router.post('/logout', protect, AuthController.logout);
+router.post('/switch-workspace', protect, AuthController.switchWorkspace);
 
 /**
  * @swagger
