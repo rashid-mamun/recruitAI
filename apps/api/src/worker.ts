@@ -4,6 +4,8 @@ import { env } from '@/config/env';
 import { startSourcingWorker } from '@/workers/sourcing.worker';
 import { startScoringWorker } from '@/workers/scoring.worker';
 import { startOutreachWorker } from '@/workers/outreach.worker';
+import { startInterviewAnalysisWorker } from '@/workers/interview-analysis.worker';
+import { redis } from '@/config/redis';
 
 async function bootstrapWorker() {
     logger.info('🔧  Starting worker process...');
@@ -13,20 +15,29 @@ async function bootstrapWorker() {
     const sourcingWorker = startSourcingWorker();
     const scoringWorker = startScoringWorker();
     const outreachWorker = startOutreachWorker();
+    const interviewAnalysisWorker = startInterviewAnalysisWorker();
+    const heartbeat = async () => {
+        await redis.setex('worker:heartbeat', 45, new Date().toISOString());
+    };
+    await heartbeat();
+    const heartbeatTimer = setInterval(() => void heartbeat(), 15_000);
 
     logger.info('✅  All workers started', {
         environment: env.NODE_ENV,
-        queues: ['sourcing', 'scoring', 'outreach'],
+        queues: ['sourcing', 'scoring', 'outreach', 'interview-analysis'],
         emailAlertsEnabled: !!(env.SMTP_HOST && env.ALERT_EMAIL_TO),
     });
 
     const shutdown = async (signal: string) => {
         logger.info(`${signal} received — closing workers gracefully`);
+        clearInterval(heartbeatTimer);
+        await redis.del('worker:heartbeat');
 
         await Promise.allSettled([
             sourcingWorker.close(),
             scoringWorker.close(),
             outreachWorker.close(),
+            interviewAnalysisWorker.close(),
         ]);
 
         logger.info('✅  All workers shut down cleanly');

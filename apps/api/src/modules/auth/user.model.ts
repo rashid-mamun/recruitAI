@@ -37,6 +37,35 @@ const UserSchema = new Schema<IUserDocument>(
             enum: ['admin', 'recruiter'] satisfies UserRole[],
             default: 'recruiter',
         },
+        defaultOrganizationId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Organization',
+            default: null,
+            index: true,
+        },
+        emailVerified: {
+            type: Boolean,
+            default: false,
+        },
+        failedLoginAttempts: {
+            type: Number,
+            default: 0,
+        },
+        lockedUntil: {
+            type: Date,
+            default: null,
+            index: true,
+        },
+        resetPasswordTokenHash: {
+            type: String,
+            default: null,
+            select: false,
+        },
+        resetPasswordExpiresAt: {
+            type: Date,
+            default: null,
+            select: false,
+        },
     },
     {
         timestamps: true,

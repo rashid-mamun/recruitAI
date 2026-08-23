@@ -3,9 +3,15 @@ import type { ITaskDocument, TaskType, TaskStatus } from '@/types';
 
 const TaskSchema = new Schema<ITaskDocument>(
     {
+        organizationId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Organization',
+            default: null,
+            index: true,
+        },
         type: {
             type: String,
-            enum: ['sourcing', 'scoring', 'outreach'] satisfies TaskType[],
+            enum: ['sourcing', 'scoring', 'outreach', 'interview_analysis'] satisfies TaskType[],
             required: true,
         },
         jobId: {
@@ -16,6 +22,11 @@ const TaskSchema = new Schema<ITaskDocument>(
         candidateId: {
             type: Schema.Types.ObjectId,
             ref: 'Candidate',
+            default: null,
+        },
+        interviewId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Interview',
             default: null,
         },
         status: {
@@ -59,6 +70,8 @@ const TaskSchema = new Schema<ITaskDocument>(
 
 TaskSchema.index({ jobId: 1 });
 TaskSchema.index({ candidateId: 1 });
+TaskSchema.index({ interviewId: 1 });
 TaskSchema.index({ status: 1, createdAt: -1 });
+TaskSchema.index({ organizationId: 1, createdAt: -1 });
 
 export const Task = mongoose.model<ITaskDocument>('Task', TaskSchema);

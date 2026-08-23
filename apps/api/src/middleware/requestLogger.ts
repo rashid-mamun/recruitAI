@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '@/config/logger';
+import { recordRequest } from '@/services/metrics.service';
 
 declare global {
     namespace Express {
@@ -20,6 +21,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     res.on('finish', () => {
         const duration = Date.now() - req.startTime;
         const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
+        recordRequest(req.method, req.route?.path ?? req.originalUrl, res.statusCode, duration);
 
         logger[level](`${req.method} ${req.originalUrl} ${res.statusCode}`, {
             correlationId: req.correlationId,

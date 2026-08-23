@@ -6,21 +6,27 @@ import type { ITask, TaskType } from '@/types';
 
 export async function createTask(opts: {
     type: TaskType;
+    organizationId?: string;
     jobId?: string;
     candidateId?: string;
+    interviewId?: string;
 }): Promise<ITask> {
     const task = await Task.create({
         type: opts.type,
+        organizationId: opts.organizationId
+            ? new mongoose.Types.ObjectId(opts.organizationId)
+            : undefined,
         jobId: opts.jobId ? new mongoose.Types.ObjectId(opts.jobId) : undefined,
         candidateId: opts.candidateId ? new mongoose.Types.ObjectId(opts.candidateId) : undefined,
+        interviewId: opts.interviewId ? new mongoose.Types.ObjectId(opts.interviewId) : undefined,
         status: 'queued',
         progress: 0,
     });
     return task.toJSON() as unknown as ITask;
 }
 
-export async function getTaskById(taskId: string): Promise<ITask> {
-    const task = await Task.findById(taskId).lean();
+export async function getTaskById(taskId: string, organizationId: string): Promise<ITask> {
+    const task = await Task.findOne({ _id: taskId, organizationId }).lean();
     if (!task) throw new NotFoundError('Task');
     return task as unknown as ITask;
 }

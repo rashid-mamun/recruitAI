@@ -10,7 +10,15 @@ import { AiFactory } from '@/services/ai/ai.factory';
 import { groqProvider } from '@/services/ai/providers/groq.provider';
 import { env } from '@/config/env';
 import { logger } from '@/config/logger';
-import { NotFoundError } from '@/middleware/errorHandler';
+import { ConflictError, NotFoundError, ValidationError } from '@/middleware/errorHandler';
+import { organizationFilter } from '@/utils/tenant';
+import { Interview } from '@/modules/interviews/interview.model';
+import { Evaluation } from '@/modules/evaluations/evaluation.model';
+import { CandidateReport } from '@/modules/reports/candidate-report.model';
+import { Comment } from '@/modules/collaboration/comment.model';
+import { Review } from '@/modules/collaboration/review.model';
+import { FileAsset } from '@/modules/files/file-asset.model';
+import { getStorageProvider } from '@/modules/files/storage.provider';
 import type {
     CandidateQueryDto,
     GlobalCandidateQueryDto,
@@ -23,18 +31,37 @@ import type { ICandidate, ICandidateScore, PaginatedResponse } from '@/types';
  */
 export async function listCandidates(
     jobId: string,
-    query: CandidateQueryDto
+    query: CandidateQueryDto,
+    organizationId?: string
 ): Promise<PaginatedResponse<ICandidate>> {
-    const { page, limit, status, sort } = query;
+    const { page, limit, status, stage, sort } = query;
 
-    const cacheKey = CacheKeys.candidates(jobId, page);
-    if (!status && sort === '-createdAt') {
+    const jobExists = await Job.exists({
+        _id: jobId,
+        ...organizationFilter(organizationId),
+    });
+    if (!jobExists) throw new NotFoundError('Job');
+
+    const tenantId = organizationId ?? 'missing';
+    const cacheKey = CacheKeys.candidates(tenantId, jobId, page);
+    if (!status && !stage && sort === '-createdAt') {
         const cached = await cacheGet<PaginatedResponse<ICandidate>>(cacheKey);
         if (cached) return cached;
     }
 
-    const filter: Record<string, unknown> = { jobId: new mongoose.Types.ObjectId(jobId) };
+    const filter: Record<string, unknown> = {
+        ...organizationFilter(organizationId),
+        jobId: new mongoose.Types.ObjectId(jobId),
+    };
     if (status) filter.status = status;
+    if (stage === 'scored') filter['score.value'] = { $gt: 0 };
+    if (stage === 'contacted') {
+        filter.status = {
+            $in: ['contacted', 'responded', 'interested', 'scheduling', 'not_interested', 'hired'],
+        };
+    }
+    if (stage === 'interested') filter.status = { $in: ['interested', 'scheduling', 'hired'] };
+    if (stage === 'hired') filter.status = 'hired';
 
     const sortField = sort.startsWith('-') ? sort.slice(1) : sort;
     const sortDir: 1 | -1 = sort.startsWith('-') ? -1 : 1;
@@ -54,7 +81,7 @@ export async function listCandidates(
         pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
 
-    if (!status && sort === '-createdAt') {
+    if (!status && !stage && sort === '-createdAt') {
         await cacheSet(cacheKey, result, CacheTTL.CANDIDATES);
     }
 
@@ -65,11 +92,12 @@ export async function listCandidates(
  * List ALL candidates across all jobs (global, filtered)
  */
 export async function listAllCandidates(
-    query: GlobalCandidateQueryDto
+    query: GlobalCandidateQueryDto,
+    organizationId?: string
 ): Promise<PaginatedResponse<ICandidate>> {
     const { page, limit, jobId, status, minScore, maxScore, search, sort } = query;
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { ...organizationFilter(organizationId) };
 
     if (jobId) filter.jobId = new mongoose.Types.ObjectId(jobId);
     if (status) {
@@ -132,8 +160,11 @@ export async function listAllCandidates(
 /**
  * Get candidate by ID
  */
-export async function getCandidateById(id: string): Promise<ICandidate> {
-    const candidate = await Candidate.findById(id).lean();
+export async function getCandidateById(id: string, organizationId?: string): Promise<ICandidate> {
+    const candidate = await Candidate.findOne({
+        _id: id,
+        ...organizationFilter(organizationId),
+    }).lean();
     if (!candidate) throw new NotFoundError('Candidate');
     return candidate as unknown as ICandidate;
 }
@@ -143,10 +174,11 @@ export async function getCandidateById(id: string): Promise<ICandidate> {
  */
 export async function updateCandidateById(
     id: string,
-    dto: UpdateCandidateDto
+    dto: UpdateCandidateDto,
+    organizationId?: string
 ): Promise<ICandidate> {
-    const candidate = await Candidate.findByIdAndUpdate(
-        id,
+    const candidate = await Candidate.findOneAndUpdate(
+        { _id: id, ...organizationFilter(organizationId) },
         { $set: dto },
         { new: true, runValidators: true }
     ).lean();
@@ -154,9 +186,194 @@ export async function updateCandidateById(
     if (!candidate) throw new NotFoundError('Candidate');
 
     // Invalidate candidate list caches
-    await cacheDel(CacheKeys.candidates((candidate as any).jobId.toString(), 1));
+    await cacheDel(
+        CacheKeys.candidates(organizationId ?? 'missing', (candidate as any).jobId.toString(), 1)
+    );
 
     return candidate as unknown as ICandidate;
+}
+
+export async function findCandidateDuplicates(candidateId: string, organizationId: string) {
+    const candidate = await Candidate.findOne({ _id: candidateId, organizationId }).lean();
+    if (!candidate) throw new NotFoundError('Candidate');
+
+    const signals: Record<string, unknown>[] = [];
+    if (candidate.email) signals.push({ email: candidate.email });
+    if (candidate.linkedinUrl) signals.push({ linkedinUrl: candidate.linkedinUrl });
+    signals.push({
+        name: { $regex: `^${escapeRegex(candidate.name)}$`, $options: 'i' },
+        currentCompany: {
+            $regex: `^${escapeRegex(candidate.currentCompany ?? '')}$`,
+            $options: 'i',
+        },
+        currentTitle: { $regex: `^${escapeRegex(candidate.currentTitle ?? '')}$`, $options: 'i' },
+    });
+
+    return Candidate.find({
+        organizationId,
+        _id: { $ne: candidateId },
+        $or: signals,
+    })
+        .limit(20)
+        .lean();
+}
+
+export async function mergeCandidates(
+    primaryCandidateId: string,
+    duplicateCandidateId: string,
+    organizationId: string
+): Promise<ICandidate> {
+    const [primary, duplicate] = await Promise.all([
+        Candidate.findOne({ _id: primaryCandidateId, organizationId }).lean(),
+        Candidate.findOne({ _id: duplicateCandidateId, organizationId }).lean(),
+    ]);
+    if (!primary) throw new NotFoundError('Primary candidate');
+    if (!duplicate) throw new NotFoundError('Duplicate candidate');
+    if (primary.jobId.toString() !== duplicate.jobId.toString()) {
+        throw new ValidationError('Candidates must belong to the same job');
+    }
+
+    const merged = await Candidate.findOneAndUpdate(
+        { _id: primaryCandidateId, organizationId },
+        {
+            $set: {
+                email: primary.email || duplicate.email,
+                phone: primary.phone || duplicate.phone,
+                headline: primary.headline || duplicate.headline,
+                summary: primary.summary || duplicate.summary,
+                experience: primary.experience || duplicate.experience,
+                currentCompany: primary.currentCompany || duplicate.currentCompany,
+                currentTitle: primary.currentTitle || duplicate.currentTitle,
+                resumeFileId: primary.resumeFileId || duplicate.resumeFileId,
+                notes: [primary.notes, duplicate.notes].filter(Boolean).join('\n\n'),
+                tags: [...new Set([...(primary.tags ?? []), ...(duplicate.tags ?? [])])],
+                skills: [...new Set([...(primary.skills ?? []), ...(duplicate.skills ?? [])])],
+                assignedRecruiterIds: [
+                    ...new Set([
+                        ...(primary.assignedRecruiterIds ?? []),
+                        ...(duplicate.assignedRecruiterIds ?? []),
+                    ]),
+                ],
+                lastActivityAt: new Date(),
+            },
+        },
+        { new: true, runValidators: true }
+    ).lean();
+
+    const primaryEvaluationExists = await Evaluation.exists({
+        candidateId: primaryCandidateId,
+        organizationId,
+    });
+    const evaluationMove = primaryEvaluationExists
+        ? Evaluation.deleteMany({ candidateId: duplicateCandidateId, organizationId })
+        : Evaluation.updateMany(
+              { candidateId: duplicateCandidateId, organizationId },
+              { candidateId: primaryCandidateId }
+          );
+
+    await Promise.all([
+        Interview.updateMany(
+            { candidateId: duplicateCandidateId, organizationId },
+            { candidateId: primaryCandidateId }
+        ),
+        evaluationMove,
+        CandidateReport.updateMany(
+            { candidateId: duplicateCandidateId, organizationId },
+            { candidateId: primaryCandidateId }
+        ),
+        Message.updateMany(
+            { candidateId: duplicateCandidateId },
+            { candidateId: primaryCandidateId }
+        ),
+        FileAsset.updateMany(
+            { ownerType: 'candidate', ownerId: duplicateCandidateId, organizationId },
+            { ownerId: primaryCandidateId }
+        ),
+        Comment.updateMany(
+            { resourceType: 'candidate', resourceId: duplicateCandidateId, organizationId },
+            { resourceId: primaryCandidateId }
+        ),
+        Review.updateMany(
+            { resourceType: 'candidate', resourceId: duplicateCandidateId, organizationId },
+            { resourceId: primaryCandidateId }
+        ),
+    ]);
+    await Candidate.deleteOne({ _id: duplicateCandidateId, organizationId });
+    return merged as unknown as ICandidate;
+}
+
+export async function exportCandidateData(candidateId: string, organizationId: string) {
+    const candidate = await Candidate.findOne({ _id: candidateId, organizationId }).lean();
+    if (!candidate) throw new NotFoundError('Candidate');
+    const [messages, interviews, evaluations, reports, files, comments, reviews] =
+        await Promise.all([
+            Message.find({ candidateId }).lean(),
+            Interview.find({ candidateId, organizationId }).lean(),
+            Evaluation.find({ candidateId, organizationId }).lean(),
+            CandidateReport.find({ candidateId, organizationId }).lean(),
+            FileAsset.find({ ownerType: 'candidate', ownerId: candidateId, organizationId }).lean(),
+            Comment.find({
+                resourceType: 'candidate',
+                resourceId: candidateId,
+                organizationId,
+            }).lean(),
+            Review.find({
+                resourceType: 'candidate',
+                resourceId: candidateId,
+                organizationId,
+            }).lean(),
+        ]);
+    return {
+        exportedAt: new Date(),
+        candidate,
+        messages,
+        interviews,
+        evaluations,
+        reports,
+        files,
+        comments,
+        reviews,
+    };
+}
+
+export async function deleteCandidateData(
+    candidateId: string,
+    organizationId: string
+): Promise<void> {
+    const candidate = await Candidate.findOne({ _id: candidateId, organizationId }).lean();
+    if (!candidate) throw new NotFoundError('Candidate');
+    const fileAssets = await FileAsset.find({
+        ownerType: 'candidate',
+        ownerId: candidateId,
+        organizationId,
+    }).lean();
+    await Promise.all(
+        fileAssets.map(asset =>
+            getStorageProvider(asset.storageProvider)
+                .delete(asset.storageKey)
+                .catch(error => {
+                    logger.warn('Unable to delete candidate storage object', {
+                        candidateId,
+                        storageKey: asset.storageKey,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                })
+        )
+    );
+    await Promise.all([
+        Message.deleteMany({ candidateId }),
+        Interview.deleteMany({ candidateId, organizationId }),
+        Evaluation.deleteMany({ candidateId, organizationId }),
+        CandidateReport.deleteMany({ candidateId, organizationId }),
+        FileAsset.deleteMany({ ownerType: 'candidate', ownerId: candidateId, organizationId }),
+        Comment.deleteMany({ resourceType: 'candidate', resourceId: candidateId, organizationId }),
+        Review.deleteMany({ resourceType: 'candidate', resourceId: candidateId, organizationId }),
+    ]);
+    await Candidate.deleteOne({ _id: candidateId, organizationId });
+}
+
+function escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -164,9 +381,13 @@ export async function updateCandidateById(
  */
 export async function scoreCandidate(
     candidateId: string,
-    forceRefresh: boolean
+    forceRefresh: boolean,
+    organizationId?: string
 ): Promise<{ taskId: string; status: string } | { cached: true; score: ICandidateScore }> {
-    const candidate = await Candidate.findById(candidateId).lean();
+    const candidate = await Candidate.findOne({
+        _id: candidateId,
+        ...organizationFilter(organizationId),
+    }).lean();
     if (!candidate) throw new NotFoundError('Candidate');
 
     const cacheKey = CacheKeys.score(candidateId, (candidate as any).jobId.toString());
@@ -183,6 +404,7 @@ export async function scoreCandidate(
 
     const task = await createTask({
         type: 'scoring',
+        organizationId,
         jobId: (candidate as any).jobId.toString(),
         candidateId,
     });
@@ -198,7 +420,9 @@ export async function scoreCandidate(
         { jobId: task._id.toString() }
     );
 
-    await cacheDel(CacheKeys.candidates((candidate as any).jobId.toString(), 1));
+    await cacheDel(
+        CacheKeys.candidates(organizationId ?? 'missing', (candidate as any).jobId.toString(), 1)
+    );
 
     return { taskId: task._id.toString(), status: 'queued' };
 }
@@ -208,12 +432,33 @@ export async function scoreCandidate(
  */
 export async function sendOutreach(
     candidateId: string,
-    jobId: string
+    jobId: string,
+    organizationId?: string
 ): Promise<{ taskId: string; status: string }> {
-    const candidate = await Candidate.findById(candidateId).lean();
+    const candidate = await Candidate.findOne({
+        _id: candidateId,
+        ...organizationFilter(organizationId),
+    }).lean();
     if (!candidate) throw new NotFoundError('Candidate');
 
-    const task = await createTask({ type: 'outreach', jobId, candidateId });
+    if ((candidate as any).jobId.toString() !== jobId) {
+        throw new ValidationError('Candidate does not belong to this role.');
+    }
+    const job = await Job.findOne({
+        _id: jobId,
+        ...organizationFilter(organizationId),
+    })
+        .select('status')
+        .lean();
+    if (!job) throw new NotFoundError('Job');
+    if (job.status !== 'active') {
+        throw new ConflictError('Resume this role before sending candidate outreach.');
+    }
+    if (!['new', 'sourced', 'scored'].includes((candidate as any).status)) {
+        throw new ConflictError('Outreach has already started for this candidate.');
+    }
+
+    const task = await createTask({ type: 'outreach', organizationId, jobId, candidateId });
 
     if (
         (candidate as any).status === 'new' ||
@@ -221,7 +466,7 @@ export async function sendOutreach(
         (candidate as any).status === 'sourced'
     ) {
         await Candidate.findByIdAndUpdate(candidateId, { $set: { status: 'contacted' } });
-        await cacheDel(CacheKeys.candidates(jobId, 1));
+        await cacheDel(CacheKeys.candidates(organizationId ?? 'missing', jobId, 1));
     }
 
     await outreachQueue.add(
@@ -238,7 +483,8 @@ export async function sendOutreach(
  */
 export async function classifyResponse(
     candidateId: string,
-    message: string
+    message: string,
+    organizationId?: string
 ): Promise<{
     intent: 'interested' | 'not_interested' | 'maybe';
     confidence: number;
@@ -246,7 +492,10 @@ export async function classifyResponse(
     candidateStatus: string;
     schedulingLink: string | null;
 }> {
-    const candidate = await Candidate.findById(candidateId).lean();
+    const candidate = await Candidate.findOne({
+        _id: candidateId,
+        ...organizationFilter(organizationId),
+    }).lean();
     if (!candidate) throw new NotFoundError('Candidate');
 
     const trimmedMessage = message.trim();
@@ -362,8 +611,11 @@ export async function classifyResponse(
 /**
  * Get all messages for a candidate
  */
-export async function getCandidateMessages(candidateId: string) {
-    const candidate = await Candidate.findById(candidateId).lean();
+export async function getCandidateMessages(candidateId: string, organizationId?: string) {
+    const candidate = await Candidate.findOne({
+        _id: candidateId,
+        ...organizationFilter(organizationId),
+    }).lean();
     if (!candidate) throw new NotFoundError('Candidate');
     return Message.find({ candidateId }).sort({ createdAt: 1 }).lean();
 }

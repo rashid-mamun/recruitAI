@@ -11,9 +11,12 @@ const redisConfig = {
     lazyConnect: false,
 };
 
-export const redis = new Redis(redisConfig);
+const createRedisConnection = () =>
+    env.REDIS_URL ? new Redis(env.REDIS_URL, redisConfig) : new Redis(redisConfig);
 
-export const bullRedis = new Redis(redisConfig);
+export const redis = createRedisConnection();
+
+export const bullRedis = createRedisConnection();
 
 redis.on('connect', () => logger.info('✅  Redis connected'));
 redis.on('error', err => logger.error('Redis error', { error: err.message }));
@@ -48,8 +51,9 @@ export async function cacheDelPattern(pattern: string): Promise<void> {
 
 export const CacheKeys = {
     score: (candidateId: string, jobId: string) => `score:${candidateId}:${jobId}`,
-    job: (jobId: string) => `job:${jobId}`,
-    candidates: (jobId: string, page: number) => `candidates:${jobId}:page:${page}`,
+    job: (organizationId: string, jobId: string) => `org:${organizationId}:job:${jobId}`,
+    candidates: (organizationId: string, jobId: string, page: number) =>
+        `org:${organizationId}:candidates:${jobId}:page:${page}`,
     queueStats: () => `queue-stats`,
     intent: (msgHash: string) => `intent:${msgHash}`,
 };

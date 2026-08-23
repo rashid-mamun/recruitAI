@@ -5,6 +5,10 @@
     "scripts": {
         "dev": "turbo run dev",
         "build": "turbo run build",
+        "test": "pnpm --filter @recruiting/api test",
+        "smoke:backend": "pnpm --filter @recruiting/api smoke:backend",
+        "verify": "pnpm typecheck && pnpm test && pnpm build",
+        "seed": "pnpm --filter @recruiting/api seed",
         "lint": "turbo run lint",
         "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
         "typecheck": "turbo run typecheck"

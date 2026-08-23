@@ -3,6 +3,7 @@ import { asyncHandler } from '@/middleware/errorHandler';
 import { getTaskById } from './task.service';
 import { sse } from '@/services/sse.service';
 import { logger } from '@/config/logger';
+import { getAuthUser } from '@/utils/tenant';
 
 const router: IRouter = Router();
 
@@ -39,7 +40,7 @@ const router: IRouter = Router();
 router.get(
     '/:taskId',
     asyncHandler(async (req: Request, res: Response) => {
-        const task = await getTaskById(req.params.taskId);
+        const task = await getTaskById(req.params.taskId, getAuthUser(req).organizationId!);
         res.json({ success: true, data: task });
     })
 );
@@ -68,7 +69,7 @@ router.get('/:taskId/stream', async (req: Request, res: Response) => {
 
     let task;
     try {
-        task = await getTaskById(taskId);
+        task = await getTaskById(taskId, getAuthUser(req).organizationId!);
     } catch {
         res.status(404).json({ success: false, message: 'Task not found' });
         return;

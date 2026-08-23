@@ -7,27 +7,39 @@ import { groqProvider } from './providers/groq.provider';
 
 export class AiFactory {
     static getProvider(): IAiProvider {
-        const providerName = env.ACTIVE_AI_PROVIDER || 'gemini';
+        const providerName = env.ACTIVE_AI_PROVIDER?.toLowerCase();
 
-        if (providerName.toLowerCase() === 'openai') {
+        if (providerName === 'openai') {
             if (!env.OPENAI_API_KEY) {
                 logger.warn(
-                    'OpenAI selected but no API key found, falling back to Gemini (if available) or it will fail.'
+                    'OpenAI selected but no API key found. Falling back to free-first provider order.'
                 );
+            } else {
+                return openaiProvider;
             }
-            return openaiProvider;
         }
 
-        if (providerName.toLowerCase() === 'groq') {
+        if (providerName === 'groq') {
             if (!env.GROQ_API_KEY) {
-                logger.warn('Groq selected but no API key found.');
+                logger.warn('Groq selected but no API key found. Falling back if possible.');
+            } else {
+                return groqProvider;
             }
-            return groqProvider;
         }
 
-        if (!env.GEMINI_API_KEY) {
-            logger.warn('Gemini selected but no API key found.');
+        if (providerName === 'gemini') {
+            if (!env.GEMINI_API_KEY) {
+                logger.warn('Gemini selected but no API key found. Falling back if possible.');
+            } else {
+                return geminiProvider;
+            }
         }
-        return geminiProvider;
+
+        if (env.GROQ_API_KEY) return groqProvider;
+        if (env.GEMINI_API_KEY) return geminiProvider;
+        if (env.OPENAI_API_KEY) return openaiProvider;
+
+        logger.warn('No AI provider key configured. Callers should use local fallback.');
+        return groqProvider;
     }
 }

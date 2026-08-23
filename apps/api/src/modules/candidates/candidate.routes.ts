@@ -65,6 +65,10 @@ router.get('/jobs/:jobId/candidates', CandidateController.listCandidates);
  *         description: Candidate not found
  */
 router.get('/candidates/:id', CandidateController.getById);
+router.get('/candidates/:id/duplicates', CandidateController.listDuplicates);
+router.post('/candidates/:id/merge', CandidateController.mergeCandidate);
+router.get('/candidates/:id/export', CandidateController.exportCandidate);
+router.delete('/candidates/:id', CandidateController.deleteCandidate);
 
 /**
  * @swagger
