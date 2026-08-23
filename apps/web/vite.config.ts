@@ -10,6 +10,20 @@ export default defineConfig({
             '@': path.resolve(__dirname, './src'),
         },
     },
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks(id) {
+                    if (!id.includes('node_modules')) return undefined;
+                    if (id.includes('@tanstack')) return 'vendor-query';
+                    if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
+                    if (id.includes('axios')) return 'vendor-http';
+                    if (id.includes('lucide')) return 'vendor-icons';
+                    return 'vendor';
+                },
+            },
+        },
+    },
     server: {
         host: '0.0.0.0',
         port: 5173,

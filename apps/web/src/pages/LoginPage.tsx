@@ -9,6 +9,7 @@ import {
     Sparkles,
     User,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
@@ -23,9 +24,21 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const googleButtonRef = useRef<HTMLDivElement | null>(null);
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+    const googleEnabled = Boolean(googleClientId);
+
+    const switchAuthMode = (loginMode: boolean) => {
+        if (loginMode === isLogin) return;
+        setIsLogin(loginMode);
+        setName('');
+        setEmail('');
+        setPassword('');
+        setError('');
+        setShowPassword(false);
+        setLoading(false);
+    };
 
     useEffect(() => {
-        if (!googleClientId || !googleButtonRef.current) return;
+        if (!googleEnabled || !googleClientId || !googleButtonRef.current) return;
 
         let cancelled = false;
 
@@ -100,7 +113,7 @@ export default function LoginPage() {
         return () => {
             cancelled = true;
         };
-    }, [googleClientId, isLogin, loginWithGoogle]);
+    }, [googleClientId, googleEnabled, isLogin, loginWithGoogle]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -155,12 +168,7 @@ export default function LoginPage() {
                         type="button"
                         className={`auth-toggle-tab ${isLogin ? 'is-active' : ''}`}
                         aria-pressed={isLogin}
-                        onClick={() => {
-                            if (!isLogin) {
-                                setIsLogin(true);
-                                setError('');
-                            }
-                        }}
+                        onClick={() => switchAuthMode(true)}
                     >
                         Sign in
                     </button>
@@ -168,20 +176,15 @@ export default function LoginPage() {
                         type="button"
                         className={`auth-toggle-tab ${!isLogin ? 'is-active' : ''}`}
                         aria-pressed={!isLogin}
-                        onClick={() => {
-                            if (isLogin) {
-                                setIsLogin(false);
-                                setError('');
-                            }
-                        }}
+                        onClick={() => switchAuthMode(false)}
                     >
                         Sign up
                     </button>
                 </div>
 
-                <div className="auth-google-area">
-                    {googleClientId ? (
-                        <>
+                {googleEnabled && (
+                    <>
+                        <div className="auth-google-area">
                             <div
                                 ref={googleButtonRef}
                                 className={
@@ -191,21 +194,20 @@ export default function LoginPage() {
                                 }
                             />
                             {googleLoading && <div className="auth-google-mask">Signing in...</div>}
-                        </>
-                    ) : (
-                        <div className="auth-google-missing">
-                            Add <code>VITE_GOOGLE_CLIENT_ID</code> to enable Google sign-in.
                         </div>
-                    )}
-                </div>
 
-                <div className="auth-divider">
-                    <span>or continue with email</span>
-                </div>
+                        <div className="auth-divider">
+                            <span>or continue with email</span>
+                        </div>
+                    </>
+                )}
 
                 {error && (
                     <div className="auth-error animate-fade-in" role="alert">
-                        {error}
+                        <span>{error}</span>
+                        {error.toLowerCase().includes('locked') && (
+                            <Link to="/forgot-password">Reset password</Link>
+                        )}
                     </div>
                 )}
 
@@ -223,10 +225,15 @@ export default function LoginPage() {
                                 <User size={17} />
                                 <input
                                     id="auth-name"
+                                    name="signup-name"
                                     className="input"
                                     required
                                     value={name}
-                                    onChange={(e) => setName(e.target.value)}
+                                    onChange={(e) => {
+                                        setName(e.target.value);
+                                        setError('');
+                                    }}
+                                    autoComplete="off"
                                     placeholder="Jane Recruiter"
                                 />
                             </div>
@@ -234,38 +241,49 @@ export default function LoginPage() {
                     )}
 
                     <div className="form-group">
-                        <label className="label" htmlFor="auth-email">
+                        <label className="label" htmlFor={isLogin ? 'login-email' : 'signup-email'}>
                             Work email
                         </label>
                         <div className="auth-field">
                             <Mail size={17} />
                             <input
-                                id="auth-email"
+                                id={isLogin ? 'login-email' : 'signup-email'}
+                                name={isLogin ? 'login-email' : 'signup-email'}
                                 className="input"
                                 type="email"
-                                autoComplete="email"
+                                autoComplete={isLogin ? 'email' : 'off'}
                                 required
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={(e) => {
+                                    setEmail(e.target.value);
+                                    setError('');
+                                }}
                                 placeholder="name@company.com"
                             />
                         </div>
                     </div>
 
                     <div className="form-group">
-                        <label className="label" htmlFor="auth-password">
+                        <label
+                            className="label"
+                            htmlFor={isLogin ? 'login-password' : 'signup-password'}
+                        >
                             Password
                         </label>
                         <div className="auth-field auth-field--password">
                             <LockKeyhole size={17} />
                             <input
-                                id="auth-password"
+                                id={isLogin ? 'login-password' : 'signup-password'}
+                                name={isLogin ? 'login-password' : 'signup-password'}
                                 className="input"
                                 type={showPassword ? 'text' : 'password'}
                                 autoComplete={isLogin ? 'current-password' : 'new-password'}
                                 required
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                onChange={(e) => {
+                                    setPassword(e.target.value);
+                                    setError('');
+                                }}
                                 placeholder="Enter password"
                             />
                             <button
@@ -301,14 +319,21 @@ export default function LoginPage() {
                     </button>
                 </form>
 
+                {isLogin && (
+                    <div className="auth-footer" style={{ marginTop: 12 }}>
+                        <Link className="auth-toggle-link" to="/forgot-password">
+                            Forgot password?
+                        </Link>
+                    </div>
+                )}
+
                 <div className="auth-footer">
                     {isLogin ? "Don't have an account? " : 'Already have an account? '}
                     <button
                         type="button"
                         className="auth-toggle-link"
                         onClick={() => {
-                            setIsLogin(!isLogin);
-                            setError('');
+                            switchAuthMode(!isLogin);
                         }}
                     >
                         {isLogin ? 'Sign up' : 'Sign in'}

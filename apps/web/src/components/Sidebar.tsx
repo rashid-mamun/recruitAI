@@ -2,11 +2,15 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
     LogIn as LogInIcon,
+    LogOut as LogOutIcon,
     ChevronLeft as ChevronLeftIcon,
     Briefcase as BriefcaseIcon,
     Users as UsersIcon,
+    FileText as FileTextIcon,
     Activity as ActivityIcon,
     Globe as GlobeIcon,
+    Settings as SettingsIcon,
+    BarChart3,
     ExternalLink,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -92,7 +96,10 @@ export default function Sidebar({
     });
     const location = useLocation();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
+    const workspaceRole = user?.workspaceRole ?? (user?.role === 'admin' ? 'admin' : 'recruiter');
+    const interviewerOnly = workspaceRole === 'interviewer';
+    const canManageWorkspace = workspaceRole === 'owner' || workspaceRole === 'admin';
 
     const toggleCollapsed = () => {
         const next = !collapsed;
@@ -102,6 +109,9 @@ export default function Sidebar({
 
     const isJobs = location.pathname.startsWith('/jobs');
     const isCandidates = location.pathname.startsWith('/candidates');
+    const isInterviews = location.pathname.startsWith('/interviews');
+    const isSettings = location.pathname.startsWith('/settings');
+    const isAnalytics = location.pathname.startsWith('/analytics');
 
     // Queries
     const { data: jobs } = useQuery({ queryKey: ['jobs'], queryFn: () => getJobs() });
@@ -116,6 +126,7 @@ export default function Sidebar({
             return res.data.data;
         },
         refetchInterval: 10_000,
+        enabled: user?.role === 'admin',
     });
 
     const activeJobCount = jobs?.length || 0;
@@ -151,7 +162,8 @@ export default function Sidebar({
                     <button
                         className="collapse-btn"
                         onClick={toggleCollapsed}
-                        aria-label="Toggle sidebar"
+                        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                     >
                         <ChevronLeftIcon
                             size={12}
@@ -165,55 +177,104 @@ export default function Sidebar({
 
                 <div className="sb-body">
                     {!collapsed && <div className="section-label">Menu</div>}
-                    <NavItemWrapper collapsed={collapsed} tooltip="Jobs">
-                        <NavItem
-                            icon={<BriefcaseIcon size={16} />}
-                            label="Jobs"
-                            badge={activeJobCount}
-                            active={isJobs}
-                            collapsed={collapsed}
-                            onClick={() => {
-                                setMobileMenuOpen(false);
-                                navigate('/jobs');
-                            }}
-                        />
-                    </NavItemWrapper>
+                    {!interviewerOnly && (
+                        <NavItemWrapper collapsed={collapsed} tooltip="Jobs">
+                            <NavItem
+                                icon={<BriefcaseIcon size={16} />}
+                                label="Jobs"
+                                badge={activeJobCount}
+                                active={isJobs}
+                                collapsed={collapsed}
+                                onClick={() => {
+                                    setMobileMenuOpen(false);
+                                    navigate('/jobs');
+                                }}
+                            />
+                        </NavItemWrapper>
+                    )}
 
-                    <NavItemWrapper collapsed={collapsed} tooltip="All candidates">
+                    {!interviewerOnly && (
+                        <NavItemWrapper collapsed={collapsed} tooltip="All candidates">
+                            <NavItem
+                                icon={<UsersIcon size={16} />}
+                                label="All candidates"
+                                badge={totalCandidates}
+                                active={isCandidates}
+                                collapsed={collapsed}
+                                onClick={() => {
+                                    setMobileMenuOpen(false);
+                                    navigate('/candidates');
+                                }}
+                            />
+                        </NavItemWrapper>
+                    )}
+
+                    <NavItemWrapper collapsed={collapsed} tooltip="Interviews">
                         <NavItem
-                            icon={<UsersIcon size={16} />}
-                            label="All candidates"
-                            badge={totalCandidates}
-                            active={isCandidates}
+                            icon={<FileTextIcon size={16} />}
+                            label="Interviews"
+                            active={isInterviews}
                             collapsed={collapsed}
                             onClick={() => {
                                 setMobileMenuOpen(false);
-                                navigate('/candidates');
+                                navigate('/interviews');
                             }}
                         />
                     </NavItemWrapper>
 
                     <div className="sb-divider" />
 
+                    {!interviewerOnly && (
+                        <NavItemWrapper collapsed={collapsed} tooltip="Analytics">
+                            <NavItem
+                                icon={<BarChart3 size={16} />}
+                                label="Analytics"
+                                active={isAnalytics}
+                                collapsed={collapsed}
+                                onClick={() => {
+                                    setMobileMenuOpen(false);
+                                    navigate('/analytics');
+                                }}
+                            />
+                        </NavItemWrapper>
+                    )}
+
                     {!collapsed && <div className="section-label">System</div>}
-                    <NavItemWrapper collapsed={collapsed} tooltip="Queue monitor">
-                        <NavItem
-                            icon={<ActivityIcon size={16} />}
-                            label="Queue monitor"
-                            external
-                            onClick={() =>
-                                window.open('http://localhost:5000/admin/queues', '_blank')
-                            }
-                            collapsed={collapsed}
-                        />
-                    </NavItemWrapper>
+                    {canManageWorkspace && (
+                        <NavItemWrapper collapsed={collapsed} tooltip="Settings">
+                            <NavItem
+                                icon={<SettingsIcon size={16} />}
+                                label="Settings"
+                                active={isSettings}
+                                onClick={() => {
+                                    setMobileMenuOpen(false);
+                                    navigate('/settings');
+                                }}
+                                collapsed={collapsed}
+                            />
+                        </NavItemWrapper>
+                    )}
+
+                    {(user?.role === 'admin' || workspaceRole === 'admin') && (
+                        <NavItemWrapper collapsed={collapsed} tooltip="Queue monitor">
+                            <NavItem
+                                icon={<ActivityIcon size={16} />}
+                                label="Queue monitor"
+                                external
+                                onClick={() =>
+                                    window.open('http://localhost:5000/admin/queues', '_blank')
+                                }
+                                collapsed={collapsed}
+                            />
+                        </NavItemWrapper>
+                    )}
 
                     <NavItemWrapper collapsed={collapsed} tooltip="API docs">
                         <NavItem
                             icon={<GlobeIcon size={16} />}
                             label="API docs"
                             external
-                            onClick={() => window.open('http://localhost:5000/api-docs', '_blank')}
+                            onClick={() => window.open('http://localhost:5000/api/docs', '_blank')}
                             collapsed={collapsed}
                         />
                     </NavItemWrapper>
@@ -251,6 +312,19 @@ export default function Sidebar({
                             </div>
                         )}
                     </div>
+                    <button
+                        type="button"
+                        className={`sidebar-logout ${collapsed ? 'collapsed' : ''}`}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            logout();
+                        }}
+                        aria-label="Sign out"
+                        title="Sign out"
+                    >
+                        <LogOutIcon size={15} />
+                        {!collapsed && <span>Sign out</span>}
+                    </button>
                 </div>
             </aside>
         </>

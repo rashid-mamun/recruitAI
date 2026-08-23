@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Search, Download, Users, X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -16,6 +16,7 @@ const STATUSES: CandidateStatus[] = [
     'contacted',
     'interested',
     'responded',
+    'scheduling',
     'hired',
     'not_interested',
 ];
@@ -25,6 +26,7 @@ const STATUS_LABELS: Record<string, string> = {
     contacted: 'Contacted',
     interested: 'Interested',
     responded: 'Responded',
+    scheduling: 'Scheduling',
     hired: 'Hired',
     not_interested: 'Not Interested',
 };
@@ -34,6 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
     contacted: '#3b82f6',
     interested: '#10b981',
     responded: '#10b981',
+    scheduling: '#06b6d4',
     hired: '#10b981',
     not_interested: '#ef4444',
 };
@@ -47,8 +50,6 @@ function avatarColor(name: string) {
 
 function normalizeStatus(status: string): CandidateStatus {
     if (status === 'sourced') return 'new';
-    if (status === 'responded') return 'interested';
-    if (status === 'scheduling') return 'hired';
     if (status === 'rejected') return 'not_interested';
     return status as CandidateStatus;
 }
@@ -98,7 +99,7 @@ export default function AllCandidatesPage() {
                 search: search || undefined,
                 minScore: minScore > 0 ? minScore : undefined,
                 maxScore: maxScore < 100 ? maxScore : undefined,
-                status: selectedStatuses.length === 1 ? selectedStatuses[0] : undefined,
+                status: selectedStatuses.length ? selectedStatuses.join(',') : undefined,
                 jobId: jobFilter || undefined,
                 sort: sortBy,
                 page,
@@ -117,12 +118,15 @@ export default function AllCandidatesPage() {
     const total = data?.pagination?.total ?? 0;
     const totalPages = data?.pagination?.totalPages ?? 1;
 
-    const filteredCandidates =
-        selectedStatuses.length > 1
-            ? candidates.filter((c) =>
-                  selectedStatuses.includes(normalizeStatus(c.status) as CandidateStatus),
-              )
-            : candidates;
+    const filteredCandidates = candidates;
+
+    useEffect(() => {
+        const visibleIds = new Set(candidates.map((candidate) => candidate._id));
+        setSelected((previous) => {
+            const next = new Set([...previous].filter((id) => visibleIds.has(id)));
+            return next.size === previous.size ? previous : next;
+        });
+    }, [candidates]);
 
     const toggleStatus = (s: CandidateStatus) => {
         setSelectedStatuses((p) => (p.includes(s) ? p.filter((x) => x !== s) : [...p, s]));
@@ -142,6 +146,10 @@ export default function AllCandidatesPage() {
                 : new Set(filteredCandidates.map((c) => c._id)),
         );
     const selectedList = filteredCandidates.filter((c) => selected.has(c._id));
+    const outreachEligible = selectedList.filter((candidate) => {
+        const job = jobs.find((item) => item._id === candidate.jobId);
+        return job?.status === 'active' && ['new', 'sourced', 'scored'].includes(candidate.status);
+    });
     const hasFilters = !!(
         search ||
         minScore > 0 ||
@@ -161,30 +169,52 @@ export default function AllCandidatesPage() {
 
     const bulkScore = useMutation({
         mutationFn: async () => {
-            for (const c of selectedList) {
-                try {
-                    await scoreCandidate(c._id);
-                } catch {}
-            }
+            const results = await Promise.allSettled(
+                selectedList.map((c) => scoreCandidate(c._id)),
+            );
+            return {
+                succeeded: results.filter((result) => result.status === 'fulfilled').length,
+                failed: results.filter((result) => result.status === 'rejected').length,
+            };
         },
-        onSuccess: () => {
-            showSuccess(`bulk-score-${Date.now()}`, `Scoring ${selectedList.length} candidates...`);
+        onSuccess: ({ succeeded, failed }) => {
+            if (succeeded) {
+                showSuccess(
+                    `bulk-score-${Date.now()}`,
+                    `Scoring queued for ${succeeded} candidate${succeeded === 1 ? '' : 's'}.`,
+                );
+            }
+            if (failed)
+                showError(
+                    `bulk-score-error-${Date.now()}`,
+                    `${failed} scoring request${failed === 1 ? '' : 's'} failed.`,
+                );
             refetch();
         },
     });
     const bulkOutreach = useMutation({
         mutationFn: async () => {
-            for (const c of selectedList) {
-                try {
-                    await sendOutreach(c._id, c.jobId);
-                } catch {}
-            }
+            const results = await Promise.allSettled(
+                outreachEligible.map((c) => sendOutreach(c._id, c.jobId)),
+            );
+            return {
+                succeeded: results.filter((result) => result.status === 'fulfilled').length,
+                failed: results.filter((result) => result.status === 'rejected').length,
+            };
         },
-        onSuccess: () =>
-            showSuccess(
-                `bulk-outreach-${Date.now()}`,
-                `Outreach queued for ${selectedList.length} candidates.`,
-            ),
+        onSuccess: ({ succeeded, failed }) => {
+            if (succeeded) {
+                showSuccess(
+                    `bulk-outreach-${Date.now()}`,
+                    `Outreach queued for ${succeeded} candidate${succeeded === 1 ? '' : 's'}.`,
+                );
+            }
+            if (failed)
+                showError(
+                    `bulk-outreach-error-${Date.now()}`,
+                    `${failed} outreach request${failed === 1 ? '' : 's'} failed.`,
+                );
+        },
         onError: () => showError(`bulk-outreach-${Date.now()}`, 'Failed to queue outreach.'),
     });
 
@@ -222,6 +252,7 @@ export default function AllCandidatesPage() {
 
             {/* Filter bar */}
             <div
+                className="candidate-filterbar"
                 style={{
                     display: 'flex',
                     gap: 12,
@@ -267,7 +298,7 @@ export default function AllCandidatesPage() {
                         max={100}
                         value={minScore}
                         onChange={(e) => {
-                            setMinScore(+e.target.value);
+                            setMinScore(Math.min(+e.target.value, maxScore));
                             setPage(1);
                         }}
                         style={{ width: 70 }}
@@ -282,7 +313,7 @@ export default function AllCandidatesPage() {
                         max={100}
                         value={maxScore}
                         onChange={(e) => {
-                            setMaxScore(+e.target.value);
+                            setMaxScore(Math.max(+e.target.value, minScore));
                             setPage(1);
                         }}
                         style={{ width: 70 }}
@@ -385,10 +416,15 @@ export default function AllCandidatesPage() {
                     <button
                         className="btn btn--secondary btn--sm"
                         onClick={() => bulkOutreach.mutate()}
-                        disabled={bulkOutreach.isPending}
+                        disabled={bulkOutreach.isPending || outreachEligible.length === 0}
                         aria-label="Send outreach to selected"
+                        title={
+                            outreachEligible.length === 0
+                                ? 'Select new or scored candidates from active roles.'
+                                : undefined
+                        }
                     >
-                        Send Outreach
+                        Send Outreach ({outreachEligible.length})
                     </button>
                     <button
                         className="btn btn--secondary btn--sm"
@@ -415,7 +451,7 @@ export default function AllCandidatesPage() {
             )}
 
             {/* Table */}
-            <div className="card p-0 overflow-hidden">
+            <div className="card card--no-sheen p-0">
                 {isLoading ? (
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                         {Array.from({ length: 8 }).map((_, i) => (
@@ -430,8 +466,8 @@ export default function AllCandidatesPage() {
                         action={{ label: 'Reset Filters', onClick: resetFilters }}
                     />
                 ) : (
-                    <div className="table-wrapper m-0 border-0 desktop-only">
-                        <table className="w-full">
+                    <div className="table-wrapper table-wrapper--candidates m-0 border-0 desktop-only">
+                        <table className="w-full candidate-table">
                             <thead>
                                 <tr>
                                     <th style={{ width: 40 }}>
@@ -638,7 +674,7 @@ export default function AllCandidatesPage() {
 
             {!isLoading && filteredCandidates.length > 0 && (
                 <div
-                    className="mobile-only"
+                    className="mobile-only all-candidates-mobile-list"
                     style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}
                 >
                     {filteredCandidates.map((c) => {

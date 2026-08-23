@@ -24,10 +24,6 @@ function metricTone(value: number) {
     return '#ef4444';
 }
 
-function metricArrow(value: number) {
-    return value >= 50 ? '↑' : '↓';
-}
-
 function getAvatarStyle(text: string) {
     const palettes = [
         { bg: 'rgba(124,58,237,0.25)', color: '#c4b5fd' }, // purple
@@ -42,11 +38,22 @@ function getAvatarStyle(text: string) {
 }
 
 function normalizeStatus(status: string) {
-    if (status === 'sourced') return 'new';
-    if (status === 'responded') return 'interested';
-    if (status === 'scheduling') return 'hired';
-    if (status === 'rejected') return 'not_interested';
     return status;
+}
+
+function activityLabel(status: string) {
+    const labels: Record<string, string> = {
+        new: 'Added',
+        sourced: 'Sourced',
+        scored: 'Scored',
+        contacted: 'Contacted',
+        responded: 'Responded',
+        interested: 'Marked interested',
+        not_interested: 'Marked not interested',
+        rejected: 'Rejected',
+        hired: 'Hired',
+    };
+    return labels[status] ?? 'Updated';
 }
 
 export default function JobsListPage() {
@@ -186,7 +193,7 @@ export default function JobsListPage() {
                 </div>
                 <div className="hero-panel__actions">
                     <div className="metric-pill">
-                        <span>Live roles</span> <strong>{jobs.length}</strong>
+                        <span>Total roles</span> <strong>{jobs.length}</strong>
                     </div>
                     <button
                         className="btn btn--primary btn--lg"
@@ -237,9 +244,7 @@ export default function JobsListPage() {
                             : 'var(--color-text-muted)'
                     }
                     note={
-                        globalStats.avgScore !== null
-                            ? `vs last week ${metricArrow(globalStats.avgScore)}`
-                            : 'No scores yet'
+                        globalStats.avgScore !== null ? 'across scored candidates' : 'No scores yet'
                     }
                 />
                 <StatCard
@@ -345,7 +350,7 @@ export default function JobsListPage() {
                             const segments = [
                                 {
                                     label: 'Sourced',
-                                    count: job.candidateCount || 0,
+                                    count: stats.new || 0,
                                     color: '#4a4a6a',
                                 },
                                 { label: 'Scored', count: stats.scored || 0, color: '#6366f1' },
@@ -456,14 +461,7 @@ export default function JobsListPage() {
                             </div>
                         ) : (
                             activityEvents.map((evt) => {
-                                const actionLabel =
-                                    evt.kind === 'scored'
-                                        ? 'Scored'
-                                        : evt.kind === 'sourced'
-                                          ? 'Sourced'
-                                          : evt.kind === 'contacted'
-                                            ? 'Contacted'
-                                            : 'Responded';
+                                const actionLabel = activityLabel(evt.kind);
 
                                 return (
                                     <div

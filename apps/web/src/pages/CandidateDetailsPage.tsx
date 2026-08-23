@@ -12,6 +12,8 @@ import {
     Bot,
     Zap,
     Calendar,
+    ShieldCheck,
+    Trash2,
 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useToast } from '@/contexts/ToastContext';
@@ -20,6 +22,10 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import ScoreRing from '@/components/ScoreRing';
 import { SkeletonCandidateSidebar } from '@/components/Skeleton';
 import { NoMessages } from '@/components/EmptyState';
+import CandidateReportPanel from '@/components/CandidateReportPanel';
+import CollaborationPanel from '@/components/CollaborationPanel';
+import CandidateResumePanel from '@/components/CandidateResumePanel';
+import CandidateEmailPanel from '@/components/CandidateEmailPanel';
 import type { Candidate, Message, ApiSuccess } from '@/types';
 
 const AVATAR_COLORS = ['#7C3AED', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -78,13 +84,6 @@ function formatStatus(status: string) {
     return map[status] || status;
 }
 
-interface LocalResponse {
-    id: string;
-    content: string;
-    createdAt: string;
-    schedulingLink?: string | null;
-}
-
 export default function CandidateDetailsPage() {
     const { candidateId } = useParams();
     const queryClient = useQueryClient();
@@ -106,9 +105,12 @@ export default function CandidateDetailsPage() {
     const [message, setMessage] = useState('');
     const [scoreProgress, setScoreProgress] = useState(0);
     const [outreachProgress, setOutreachProgress] = useState(0);
-    const [, setLocalResponses] = useState<LocalResponse[]>([]);
     const [animateScore, setAnimateScore] = useState(true);
+    const [activeTool, setActiveTool] = useState<'evidence' | 'email' | 'team' | 'notes'>(
+        'evidence',
+    );
 
+    const chatScrollRef = useRef<HTMLDivElement>(null);
     const chatBottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -140,7 +142,9 @@ export default function CandidateDetailsPage() {
     }, [messages]);
 
     useEffect(() => {
-        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const chatScroll = chatScrollRef.current;
+        if (!chatScroll || combinedMessages.length === 0) return;
+        chatScroll.scrollTo({ top: chatScroll.scrollHeight, behavior: 'smooth' });
     }, [combinedMessages]);
 
     useEffect(() => {
@@ -150,31 +154,11 @@ export default function CandidateDetailsPage() {
     }, [message]);
 
     useEffect(() => {
-        if (!candidateId) return;
-        try {
-            const stored = JSON.parse(localStorage.getItem('recruit-ai-starred') || '[]');
-            setStarred(Array.isArray(stored) ? stored.includes(candidateId) : false);
-        } catch {
-            setStarred(false);
-        }
-        setNotes(localStorage.getItem(`recruit-ai-notes-${candidateId}`) || '');
-        try {
-            const storedTags = JSON.parse(
-                localStorage.getItem(`recruit-ai-tags-${candidateId}`) || '[]',
-            );
-            setTags(Array.isArray(storedTags) ? storedTags : []);
-        } catch {
-            setTags([]);
-        }
-        try {
-            const storedResponses = JSON.parse(
-                localStorage.getItem(`recruit-ai-responses-${candidateId}`) || '[]',
-            );
-            setLocalResponses(Array.isArray(storedResponses) ? storedResponses : []);
-        } catch {
-            setLocalResponses([]);
-        }
-    }, [candidateId]);
+        if (!candidate) return;
+        setStarred(Boolean(candidate.starred));
+        setNotes(candidate.notes ?? '');
+        setTags(candidate.tags ?? []);
+    }, [candidate?._id, candidate?.starred, candidate?.notes, candidate?.tags]);
 
     useEffect(() => {
         if (!candidate?.score || !candidateId) return;
@@ -295,22 +279,8 @@ export default function CandidateDetailsPage() {
         onError: () => showError(`outreach-${candidateId}`, 'Failed to start outreach.'),
     });
 
-    const addLocalResponse = (msg: string) => {
-        const entry: LocalResponse = {
-            id: `local-${Date.now()}`,
-            content: msg,
-            createdAt: new Date().toISOString(),
-        };
-        setLocalResponses((prev) => {
-            const updated = [...prev, entry];
-            localStorage.setItem(`recruit-ai-responses-${candidateId}`, JSON.stringify(updated));
-            return updated;
-        });
-    };
-
     const responseMutation = useMutation({
         mutationFn: async (msg: string) => {
-            addLocalResponse(msg);
             const res = await api.post(`/api/candidates/${candidateId}/responses`, {
                 message: msg,
             });
@@ -322,50 +292,55 @@ export default function CandidateDetailsPage() {
                 `Intent ${String(data.intent).replace('_', ' ').toUpperCase()} (${(data.confidence * 100).toFixed(1)}%)`,
             );
             setMessage('');
-            if (data?.schedulingLink) {
-                setLocalResponses((prev) => {
-                    const updated = prev.map((item, idx) =>
-                        idx === prev.length - 1
-                            ? { ...item, schedulingLink: data.schedulingLink }
-                            : item,
-                    );
-                    localStorage.setItem(
-                        `recruit-ai-responses-${candidateId}`,
-                        JSON.stringify(updated),
-                    );
-                    return updated;
-                });
-            }
             refreshCandidate();
             refreshMessages();
         },
         onError: () => showError(`intent-${candidateId}-${Date.now()}`, 'Classification failed.'),
     });
 
-    const toggleStar = () => {
-        const stored = (() => {
-            try {
-                return JSON.parse(localStorage.getItem('recruit-ai-starred') || '[]');
-            } catch {
-                return [];
-            }
-        })();
-        const list = Array.isArray(stored) ? stored : [];
-        const next = starred
-            ? list.filter((id: string) => id !== candidateId)
-            : [...list, candidateId];
-        localStorage.setItem('recruit-ai-starred', JSON.stringify(next));
-        setStarred(!starred);
+    const persistCandidate = async (
+        changes: Partial<Pick<Candidate, 'starred' | 'notes' | 'tags'>>,
+    ) => {
+        const response = await api.patch<ApiSuccess<Candidate>>(
+            `/api/candidates/${candidateId}`,
+            changes,
+        );
+        queryClient.setQueryData(['candidate-details', candidateId], (previous: any) => ({
+            ...(previous ?? { messages: [] }),
+            candidate: response.data.data,
+        }));
+        return response.data.data;
     };
 
-    const saveNotes = () => localStorage.setItem(`recruit-ai-notes-${candidateId}`, notes);
+    const toggleStar = async () => {
+        const next = !starred;
+        setStarred(next);
+        try {
+            await persistCandidate({ starred: next });
+        } catch {
+            setStarred(!next);
+            showError(`star-${candidateId}`, 'Could not save starred status.');
+        }
+    };
+
+    const saveNotes = async () => {
+        try {
+            await persistCandidate({ notes });
+            showSuccess(`notes-${candidateId}`, 'Notes saved.');
+        } catch {
+            showError(`notes-${candidateId}`, 'Could not save notes.');
+        }
+    };
 
     const addTag = () => {
         const t = tagInput.trim();
         if (t && !tags.includes(t)) {
             const updated = [...tags, t];
             setTags(updated);
-            localStorage.setItem(`recruit-ai-tags-${candidateId}`, JSON.stringify(updated));
+            persistCandidate({ tags: updated }).catch(() => {
+                setTags(tags);
+                showError(`tags-${candidateId}`, 'Could not save tags.');
+            });
         }
         setTagInput('');
     };
@@ -373,7 +348,10 @@ export default function CandidateDetailsPage() {
     const removeTag = (t: string) => {
         const updated = tags.filter((x) => x !== t);
         setTags(updated);
-        localStorage.setItem(`recruit-ai-tags-${candidateId}`, JSON.stringify(updated));
+        persistCandidate({ tags: updated }).catch(() => {
+            setTags(tags);
+            showError(`tags-${candidateId}`, 'Could not save tags.');
+        });
     };
 
     const exportChat = () => {
@@ -426,9 +404,57 @@ export default function CandidateDetailsPage() {
     const isOutreaching = !!outreachTaskId || outreachMutation.isPending;
     const linkedInUrl = (candidate as any).linkedInUrl || candidate.linkedinUrl;
 
+    const exportPrivacyData = async () => {
+        try {
+            const response = await api.get(`/api/candidates/${candidateId}/export`, {
+                responseType: 'blob',
+            });
+            const url = URL.createObjectURL(response.data);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `${candidate.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-data.json`;
+            anchor.click();
+            URL.revokeObjectURL(url);
+            showSuccess('candidate-export', 'Candidate data export downloaded.');
+        } catch (error) {
+            showError(
+                'candidate-export',
+                error instanceof Error ? error.message : 'Export failed.',
+            );
+        }
+    };
+
+    const deletePrivacyData = async () => {
+        if (
+            !window.confirm(
+                `Permanently delete ${candidate.name} and all related data? This cannot be undone.`,
+            )
+        )
+            return;
+        try {
+            await api.delete(`/api/candidates/${candidateId}`);
+            showSuccess('candidate-delete', 'Candidate data permanently deleted.');
+            window.location.href = '/candidates';
+        } catch (error) {
+            showError(
+                'candidate-delete',
+                error instanceof Error ? error.message : 'Deletion failed.',
+            );
+        }
+    };
+
     return (
-        <div className="animate-fade-in pb-12">
-            <div style={{ marginBottom: 20 }}>
+        <div className="animate-fade-in pb-12 candidate-details-page">
+            <div
+                style={{
+                    marginBottom: 20,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                }}
+            >
                 <Link
                     to={`/jobs/${candidate.jobId}/candidates`}
                     style={{
@@ -441,13 +467,29 @@ export default function CandidateDetailsPage() {
                 >
                     <ArrowLeft size={15} /> Back to candidates
                 </Link>
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                        className="btn btn--secondary btn--sm"
+                        onClick={() => void exportPrivacyData()}
+                    >
+                        <ShieldCheck size={14} /> Export privacy data
+                    </button>
+                    <button
+                        className="btn btn--secondary btn--sm"
+                        style={{ color: '#ef4444' }}
+                        onClick={() => void deletePrivacyData()}
+                    >
+                        <Trash2 size={14} /> Delete candidate data
+                    </button>
+                </div>
             </div>
 
             <div
-                className="flex-col-mobile"
+                className="candidate-details-layout"
                 style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}
             >
                 <aside
+                    className="candidate-details-profile"
                     style={{
                         width: 320,
                         maxWidth: '100%',
@@ -695,93 +737,133 @@ export default function CandidateDetailsPage() {
                         </button>
                     </div>
 
-                    <div className="card" style={{ padding: 20 }}>
-                        <label
-                            className="label"
-                            htmlFor="recruiter-notes"
-                            style={{ marginBottom: 8, display: 'block' }}
+                    <div className="card candidate-toolbox">
+                        <div
+                            className="candidate-tool-tabs"
+                            role="tablist"
+                            aria-label="Candidate tools"
                         >
-                            Recruiter Notes
-                        </label>
-                        <textarea
-                            id="recruiter-notes"
-                            className="input"
-                            value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
-                            onBlur={saveNotes}
-                            placeholder="Add private notes about this candidate..."
-                            rows={4}
-                            style={{ resize: 'vertical', fontSize: 13 }}
-                        />
-                    </div>
-
-                    <div className="card" style={{ padding: 20 }}>
-                        <label className="label" style={{ marginBottom: 8, display: 'block' }}>
-                            Custom Tags
-                        </label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                            {tags.map((t) => (
-                                <span
-                                    key={t}
-                                    style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 5,
-                                        padding: '3px 10px',
-                                        borderRadius: 24,
-                                        background: 'rgba(124,58,237,0.15)',
-                                        border: '1px solid rgba(124,58,237,0.25)',
-                                        fontSize: 12,
-                                        color: '#a78bfa',
-                                    }}
+                            {(
+                                [
+                                    ['evidence', 'Evidence'],
+                                    ['email', 'Email'],
+                                    ['team', 'Team'],
+                                    ['notes', 'Notes'],
+                                ] as const
+                            ).map(([id, label]) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={activeTool === id}
+                                    className={activeTool === id ? 'is-active' : ''}
+                                    onClick={() => setActiveTool(id)}
                                 >
-                                    {t}
-                                    <button
-                                        onClick={() => removeTag(t)}
-                                        style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            color: 'inherit',
-                                            display: 'flex',
-                                            padding: 0,
-                                        }}
-                                        aria-label={`Remove tag ${t}`}
-                                    >
-                                        <X size={11} />
-                                    </button>
-                                </span>
+                                    {label}
+                                </button>
                             ))}
                         </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                            <input
-                                className="input"
-                                value={tagInput}
-                                onChange={(e) => setTagInput(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        addTag();
-                                    }
-                                }}
-                                placeholder="Add tag, press Enter"
-                                style={{ flex: 1, fontSize: 13 }}
-                                aria-label="Tag input"
-                            />
-                            <button
-                                onClick={addTag}
-                                className="btn btn--secondary"
-                                style={{ padding: '0 12px' }}
-                                aria-label="Add tag"
-                            >
-                                <Plus size={15} />
-                            </button>
+
+                        <div className="candidate-tool-content">
+                            {activeTool === 'evidence' && (
+                                <>
+                                    <CandidateResumePanel candidateId={candidate._id} />
+                                    <div className="candidate-tool-divider" />
+                                    <CandidateReportPanel candidateId={candidate._id} />
+                                </>
+                            )}
+                            {activeTool === 'email' && (
+                                <CandidateEmailPanel
+                                    candidateId={candidate._id}
+                                    hasEmail={Boolean(candidate.email)}
+                                />
+                            )}
+                            {activeTool === 'team' && (
+                                <CollaborationPanel
+                                    resourceType="candidate"
+                                    resourceId={candidate._id}
+                                />
+                            )}
+                            {activeTool === 'notes' && (
+                                <div style={{ display: 'grid', gap: 18 }}>
+                                    <div>
+                                        <label
+                                            className="label"
+                                            htmlFor="recruiter-notes"
+                                            style={{ marginBottom: 8, display: 'block' }}
+                                        >
+                                            Recruiter Notes
+                                        </label>
+                                        <textarea
+                                            id="recruiter-notes"
+                                            className="input"
+                                            value={notes}
+                                            onChange={(e) => setNotes(e.target.value)}
+                                            onBlur={saveNotes}
+                                            placeholder="Add private notes about this candidate..."
+                                            rows={4}
+                                            style={{ resize: 'vertical', fontSize: 13 }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label
+                                            className="label"
+                                            style={{ marginBottom: 8, display: 'block' }}
+                                        >
+                                            Custom Tags
+                                        </label>
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                gap: 6,
+                                                marginBottom: 8,
+                                            }}
+                                        >
+                                            {tags.map((t) => (
+                                                <span key={t} className="candidate-tool-tag">
+                                                    {t}
+                                                    <button
+                                                        onClick={() => removeTag(t)}
+                                                        aria-label={`Remove tag ${t}`}
+                                                    >
+                                                        <X size={11} />
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 6 }}>
+                                            <input
+                                                className="input"
+                                                value={tagInput}
+                                                onChange={(e) => setTagInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        addTag();
+                                                    }
+                                                }}
+                                                placeholder="Add tag, press Enter"
+                                                style={{ flex: 1, fontSize: 13 }}
+                                                aria-label="Tag input"
+                                            />
+                                            <button
+                                                onClick={addTag}
+                                                className="btn btn--secondary"
+                                                aria-label="Add tag"
+                                            >
+                                                <Plus size={15} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </aside>
 
                 <div
-                    className="card"
+                    className="card candidate-details-chat"
                     style={{
                         flex: 1,
                         display: 'flex',
@@ -908,6 +990,7 @@ export default function CandidateDetailsPage() {
                     )}
 
                     <div
+                        ref={chatScrollRef}
                         style={{
                             flex: 1,
                             overflowY: 'auto',
@@ -1212,6 +1295,7 @@ export default function CandidateDetailsPage() {
 
                 {/* Right Sidebar Timeline */}
                 <aside
+                    className="candidate-details-timeline"
                     style={{
                         width: 220,
                         flexShrink: 0,

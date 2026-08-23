@@ -6,6 +6,7 @@ import {
     loginWithGoogle as googleLoginService,
     register as registerService,
     logout as logoutService,
+    switchWorkspace as switchWorkspaceService,
     getToken as getStoredToken,
 } from '../services/auth';
 import type { User, AuthContextType } from '../types';
@@ -16,9 +17,23 @@ const AuthContext = createContext<AuthContextType>({
     register: async () => {},
     loginWithGoogle: async () => {},
     logout: () => {},
+    switchWorkspace: async () => {},
     isAuthenticated: false,
     isLoading: true,
 });
+
+const PUBLIC_PATHS = new Set([
+    '/',
+    '/contact',
+    '/privacy',
+    '/terms',
+    '/forgot-password',
+    '/reset-password',
+]);
+
+function isPublicPath(pathname: string) {
+    return PUBLIC_PATHS.has(pathname);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -34,13 +49,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     const profile = await getMe();
                     setUser(profile);
                 } catch (error) {
-                    logoutService(false);
+                    await logoutService(false);
                     setUser(null);
                     if (location.pathname !== '/login') {
                         navigate('/login');
                     }
                 }
-            } else if (location.pathname !== '/login') {
+            } else if (location.pathname !== '/login' && !isPublicPath(location.pathname)) {
                 navigate('/login');
             }
             setIsLoading(false);
@@ -51,35 +66,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const login = useCallback(
         async (email: string, password: string) => {
-            const profile = await loginService(email, password);
-            setUser(profile);
-            navigate('/');
+            await loginService(email, password);
+            setUser(await getMe());
+            navigate('/jobs', { replace: true });
         },
         [navigate],
     );
 
     const register = useCallback(
         async (name: string, email: string, password: string) => {
-            const profile = await registerService(name, email, password);
-            setUser(profile);
-            navigate('/');
+            await registerService(name, email, password);
+            setUser(await getMe());
+            navigate('/jobs', { replace: true });
         },
         [navigate],
     );
 
     const loginWithGoogle = useCallback(
         async (credential: string) => {
-            const profile = await googleLoginService(credential);
-            setUser(profile);
-            navigate('/');
+            await googleLoginService(credential);
+            setUser(await getMe());
+            navigate('/jobs', { replace: true });
         },
         [navigate],
     );
 
     const logout = useCallback(() => {
-        logoutService(true);
+        void logoutService(true);
         setUser(null);
     }, []);
+
+    const switchWorkspace = useCallback(
+        async (organizationId: string) => {
+            await switchWorkspaceService(organizationId);
+            setUser(await getMe());
+            navigate('/jobs');
+        },
+        [navigate],
+    );
 
     return (
         <AuthContext.Provider
@@ -89,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 register,
                 loginWithGoogle,
                 logout,
+                switchWorkspace,
                 isAuthenticated: !!user,
                 isLoading,
             }}

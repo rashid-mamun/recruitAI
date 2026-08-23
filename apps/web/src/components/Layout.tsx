@@ -5,7 +5,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import CommandPalette, { pushRecentPage } from './CommandPalette';
 import NotificationCenter from './NotificationCenter';
 import { useAuth } from '../contexts/AuthContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { buildApiUrl, getCandidate, getJob } from '@/services/api';
 import Sidebar from './Sidebar';
 
@@ -22,6 +22,7 @@ export default function Layout() {
     const [theme, setTheme] = useState<'dark' | 'light'>(() =>
         document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
     );
+    const mainScrollRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         const eventSource = new EventSource(buildApiUrl('/api/stream/events'));
@@ -39,6 +40,7 @@ export default function Layout() {
     // Close mobile menu on route change
     useEffect(() => {
         setMobileMenuOpen(false);
+        mainScrollRef.current?.scrollTo({ top: 0, left: 0 });
     }, [location.pathname]);
 
     useEffect(() => {
@@ -163,6 +165,9 @@ export default function Layout() {
                     <div
                         className="w-8 h-8 rounded-md flex items-center justify-center text-white text-xs font-bold"
                         style={{
+                            width: 32,
+                            height: 32,
+                            flexShrink: 0,
                             background:
                                 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))',
                             boxShadow: 'var(--shadow-glow)',
@@ -188,6 +193,7 @@ export default function Layout() {
             />
             {/* ── Main Content ──────── */}
             <main
+                ref={mainScrollRef}
                 className="flex-1 flex flex-col"
                 style={{ overflow: 'auto', background: 'var(--color-bg)' }}
             >

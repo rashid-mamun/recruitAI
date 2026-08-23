@@ -18,6 +18,8 @@ import { api, getJob, getJobCandidates, getJobStats, updateJob } from '@/service
 import KanbanBoard from '@/components/KanbanBoard';
 import PipelineStats from '@/components/PipelineStats';
 import CandidateHoverCard from '@/components/CandidateHoverCard';
+import ScorecardPanel from '@/components/ScorecardPanel';
+import CandidateComparePanel from '@/components/CandidateComparePanel';
 import { useTaskStream } from '@/hooks/useTaskStream';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -47,8 +49,12 @@ export default function JobDetailsPage() {
         return saved === 'kanban' ? 'kanban' : 'list';
     });
     const [statusFilter, setStatusFilter] = useState('');
+    const [pipelineStage, setPipelineStage] = useState<
+        '' | 'sourced' | 'scored' | 'contacted' | 'interested' | 'hired'
+    >('');
     const [sortBy, setSortBy] = useState('-updatedAt');
     const [page, setPage] = useState(1);
+    const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
 
     const { showLoading, updateProgress, showSuccess, showError } = useToast();
     const { addNotification } = useNotifications();
@@ -80,13 +86,14 @@ export default function JobDetailsPage() {
     }, [refetchStats]);
 
     const { data: candidatesData, isLoading: candidatesLoading } = useQuery({
-        queryKey: ['job-candidates', jobId, statusFilter, sortBy, page],
+        queryKey: ['job-candidates', jobId, statusFilter, pipelineStage, sortBy, page],
         queryFn: () => {
             if (!jobId) return { data: [], pagination: { total: 0, page: 1, totalPages: 1 } };
             return getJobCandidates(jobId, {
                 limit: 25,
                 sort: sortBy,
                 status: statusFilter || undefined,
+                stage: pipelineStage || undefined,
                 page,
             });
         },
@@ -94,6 +101,15 @@ export default function JobDetailsPage() {
     });
 
     const candidates: Candidate[] = candidatesData?.data ?? [];
+
+    useEffect(() => {
+        if (!candidatesData?.data) return;
+        const candidateIds = new Set(candidatesData.data.map((candidate) => candidate._id));
+        setSelectedCandidateIds((prev) => {
+            const next = prev.filter((id) => candidateIds.has(id));
+            return next.length === prev.length ? prev : next;
+        });
+    }, [candidatesData?.data]);
 
     useEffect(() => {
         if (!job) return;
@@ -135,6 +151,11 @@ export default function JobDetailsPage() {
                 setSourceTaskId(String(data.taskId));
             }
             setSourcingQuery('');
+        },
+        onError: (error: Error) => {
+            if (error.message !== 'Invalid limit') {
+                showError(`source-${jobId}`, error.message);
+            }
         },
     });
 
@@ -322,10 +343,12 @@ export default function JobDetailsPage() {
                                 }}
                             >
                                 <button
-                                    className={`pipeline-stat-item ${statusFilter === '' ? 'active-filter' : ''}`}
+                                    className={`pipeline-stat-item ${pipelineStage === 'sourced' ? 'active-filter' : ''}`}
                                     onClick={() => {
                                         setTab('candidates');
                                         setStatusFilter('');
+                                        setPipelineStage('sourced');
+                                        setPage(1);
                                     }}
                                 >
                                     <strong>{stats.sourced}</strong>{' '}
@@ -337,10 +360,12 @@ export default function JobDetailsPage() {
                                     ·
                                 </span>
                                 <button
-                                    className={`pipeline-stat-item ${statusFilter === 'scored' ? 'active-filter' : ''}`}
+                                    className={`pipeline-stat-item ${pipelineStage === 'scored' ? 'active-filter' : ''}`}
                                     onClick={() => {
                                         setTab('candidates');
-                                        setStatusFilter('scored');
+                                        setStatusFilter('');
+                                        setPipelineStage('scored');
+                                        setPage(1);
                                     }}
                                 >
                                     <strong>{stats.scored}</strong>{' '}
@@ -363,10 +388,12 @@ export default function JobDetailsPage() {
                                     ·
                                 </span>
                                 <button
-                                    className={`pipeline-stat-item ${statusFilter === 'contacted' ? 'active-filter' : ''}`}
+                                    className={`pipeline-stat-item ${pipelineStage === 'contacted' ? 'active-filter' : ''}`}
                                     onClick={() => {
                                         setTab('candidates');
-                                        setStatusFilter('contacted');
+                                        setStatusFilter('');
+                                        setPipelineStage('contacted');
+                                        setPage(1);
                                     }}
                                 >
                                     <strong>{stats.contacted}</strong>{' '}
@@ -378,10 +405,12 @@ export default function JobDetailsPage() {
                                     ·
                                 </span>
                                 <button
-                                    className={`pipeline-stat-item ${statusFilter === 'interested' ? 'active-filter' : ''}`}
+                                    className={`pipeline-stat-item ${pipelineStage === 'interested' ? 'active-filter' : ''}`}
                                     onClick={() => {
                                         setTab('candidates');
-                                        setStatusFilter('interested');
+                                        setStatusFilter('');
+                                        setPipelineStage('interested');
+                                        setPage(1);
                                     }}
                                 >
                                     <strong>{stats.interested}</strong>{' '}
@@ -393,10 +422,12 @@ export default function JobDetailsPage() {
                                     ·
                                 </span>
                                 <button
-                                    className={`pipeline-stat-item ${statusFilter === 'hired' ? 'active-filter' : ''}`}
+                                    className={`pipeline-stat-item ${pipelineStage === 'hired' ? 'active-filter' : ''}`}
                                     onClick={() => {
                                         setTab('candidates');
-                                        setStatusFilter('hired');
+                                        setStatusFilter('');
+                                        setPipelineStage('hired');
+                                        setPage(1);
                                     }}
                                 >
                                     <strong>{stats.hired}</strong>{' '}
@@ -566,6 +597,8 @@ export default function JobDetailsPage() {
                             </div>
                             <PipelineStats stats={stats} />
                         </div>
+
+                        <ScorecardPanel jobId={job._id} />
                     </div>
 
                     <aside
@@ -624,7 +657,12 @@ export default function JobDetailsPage() {
                             <button
                                 className="btn btn--primary w-full justify-center"
                                 onClick={() => startSourcing.mutate()}
-                                disabled={startSourcing.isPending}
+                                disabled={startSourcing.isPending || job.status !== 'active'}
+                                title={
+                                    job.status !== 'active'
+                                        ? 'Resume this role before starting background sourcing.'
+                                        : undefined
+                                }
                             >
                                 {startSourcing.isPending ? (
                                     <div className="spinner" />
@@ -633,8 +671,23 @@ export default function JobDetailsPage() {
                                 )}
                                 {startSourcing.isPending
                                     ? 'Queuing job...'
-                                    : 'Start Background Sourcing'}
+                                    : job.status !== 'active'
+                                      ? 'Resume role to start sourcing'
+                                      : 'Start Background Sourcing'}
                             </button>
+                            {job.status !== 'active' && (
+                                <div
+                                    style={{
+                                        marginTop: 10,
+                                        fontSize: 12,
+                                        color: 'var(--color-warning)',
+                                        lineHeight: 1.45,
+                                    }}
+                                >
+                                    Background sourcing is unavailable while this role is{' '}
+                                    {job.status}.
+                                </div>
+                            )}
                             {sourceTaskId && (
                                 <div style={{ marginTop: 10 }}>
                                     <div
@@ -671,43 +724,91 @@ export default function JobDetailsPage() {
             )}
 
             {tab === 'candidates' && (
-                <div className="card" style={{ padding: 20 }}>
-                    <div
-                        style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: 16,
-                        }}
-                    >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <Users size={18} />
-                            <span style={{ fontWeight: 700 }}>Candidates</span>
+                <>
+                    <CandidateComparePanel
+                        jobId={job._id}
+                        candidates={candidates}
+                        selectedIds={selectedCandidateIds}
+                    />
+                    <div className="card" style={{ padding: 20 }}>
+                        <div
+                            style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: 16,
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <Users size={18} />
+                                <span style={{ fontWeight: 700 }}>Candidates</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button
+                                    className={`btn ${viewMode === 'list' ? 'btn--primary' : 'btn--secondary'} btn--sm`}
+                                    onClick={() => setViewMode('list')}
+                                    aria-label="List view"
+                                >
+                                    List
+                                </button>
+                                <button
+                                    className={`btn ${viewMode === 'kanban' ? 'btn--primary' : 'btn--secondary'} btn--sm`}
+                                    onClick={() => setViewMode('kanban')}
+                                    aria-label="Kanban view"
+                                >
+                                    Kanban
+                                </button>
+                            </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <button
-                                className={`btn ${viewMode === 'list' ? 'btn--primary' : 'btn--secondary'} btn--sm`}
-                                onClick={() => setViewMode('list')}
-                                aria-label="List view"
-                            >
-                                List
-                            </button>
-                            <button
-                                className={`btn ${viewMode === 'kanban' ? 'btn--primary' : 'btn--secondary'} btn--sm`}
-                                onClick={() => setViewMode('kanban')}
-                                aria-label="Kanban view"
-                            >
-                                Kanban
-                            </button>
-                        </div>
-                    </div>
 
-                    <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-                        {viewMode === 'list' && (
+                        <div
+                            style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}
+                        >
+                            {viewMode === 'list' && (
+                                <select
+                                    value={statusFilter}
+                                    onChange={(e) => {
+                                        setStatusFilter(e.target.value);
+                                        setPipelineStage('');
+                                        setPage(1);
+                                    }}
+                                    style={{
+                                        padding: '8px 12px',
+                                        borderRadius: 6,
+                                        border: '1px solid var(--color-border)',
+                                        background: 'var(--bg-input)',
+                                        color: 'var(--color-text)',
+                                        fontSize: 14,
+                                    }}
+                                    aria-label="Filter by status"
+                                >
+                                    <option value="">All Statuses</option>
+                                    <option value="new">New</option>
+                                    <option value="interested">Interested</option>
+                                    <option value="hired">Hired</option>
+                                    <option value="not_interested">Not Interested</option>
+                                </select>
+                            )}
+
+                            {pipelineStage && (
+                                <button
+                                    type="button"
+                                    className="chip-pill"
+                                    onClick={() => {
+                                        setPipelineStage('');
+                                        setPage(1);
+                                    }}
+                                    aria-label="Clear pipeline stage filter"
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                    Pipeline: {pipelineStage} <X size={12} />
+                                </button>
+                            )}
+
                             <select
-                                value={statusFilter}
+                                value={sortBy}
                                 onChange={(e) => {
-                                    setStatusFilter(e.target.value);
+                                    setSortBy(e.target.value);
                                     setPage(1);
                                 }}
                                 style={{
@@ -718,116 +819,95 @@ export default function JobDetailsPage() {
                                     color: 'var(--color-text)',
                                     fontSize: 14,
                                 }}
-                                aria-label="Filter by status"
+                                aria-label="Sort candidates"
                             >
-                                <option value="">All Statuses</option>
-                                <option value="new">New</option>
-                                <option value="interested">Interested</option>
-                                <option value="hired">Hired</option>
-                                <option value="not_interested">Not Interested</option>
+                                <option value="-updatedAt">Recently Updated</option>
+                                <option value="name">Name (A-Z)</option>
+                                <option value="-score">Score (High to Low)</option>
+                                <option value="score">Score (Low to High)</option>
                             </select>
-                        )}
-
-                        <select
-                            value={sortBy}
-                            onChange={(e) => {
-                                setSortBy(e.target.value);
-                                setPage(1);
-                            }}
-                            style={{
-                                padding: '8px 12px',
-                                borderRadius: 6,
-                                border: '1px solid var(--color-border)',
-                                background: 'var(--bg-input)',
-                                color: 'var(--color-text)',
-                                fontSize: 14,
-                            }}
-                            aria-label="Sort candidates"
-                        >
-                            <option value="-updatedAt">Recently Updated</option>
-                            <option value="name">Name (A-Z)</option>
-                            <option value="-score">Score (High to Low)</option>
-                            <option value="score">Score (Low to High)</option>
-                        </select>
-                    </div>
-
-                    {candidatesLoading ? (
-                        <div className="list-stack">
-                            {Array.from({ length: 6 }).map((_, index) => (
-                                <div
-                                    key={index}
-                                    className="skeleton-block skeleton-line"
-                                    style={{ width: '100%', height: 40 }}
-                                />
-                            ))}
                         </div>
-                    ) : viewMode === 'kanban' ? (
-                        <KanbanBoard candidates={candidates} />
-                    ) : (
-                        <div className="table-wrapper m-0 border-0 desktop-only">
-                            <table className="w-full">
-                                <thead>
-                                    <tr>
-                                        <th>Candidate</th>
-                                        <th>Status</th>
-                                        <th>Score</th>
-                                        <th>Source</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {candidates.map((candidate) => (
-                                        <tr key={candidate._id} className="candidate-row">
-                                            <td>
-                                                <div className="flex flex-col min-w-0">
-                                                    <CandidateHoverCard candidate={candidate}>
+
+                        {candidatesLoading ? (
+                            <div className="list-stack">
+                                {Array.from({ length: 6 }).map((_, index) => (
+                                    <div
+                                        key={index}
+                                        className="skeleton-block skeleton-line"
+                                        style={{ width: '100%', height: 40 }}
+                                    />
+                                ))}
+                            </div>
+                        ) : viewMode === 'kanban' ? (
+                            <KanbanBoard candidates={candidates} />
+                        ) : (
+                            <div className="table-wrapper m-0 border-0 desktop-only">
+                                <table className="w-full">
+                                    <thead>
+                                        <tr>
+                                            <th>Candidate</th>
+                                            <th>Select</th>
+                                            <th>Status</th>
+                                            <th>Score</th>
+                                            <th>Source</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {candidates.map((candidate) => (
+                                            <tr key={candidate._id} className="candidate-row">
+                                                <td>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <CandidateHoverCard candidate={candidate}>
+                                                            <span
+                                                                className="candidate-card__name truncate"
+                                                                style={{ display: 'inline-block' }}
+                                                            >
+                                                                {candidate.name}
+                                                            </span>
+                                                        </CandidateHoverCard>
                                                         <span
-                                                            className="candidate-card__name truncate"
-                                                            style={{ display: 'inline-block' }}
+                                                            className="candidate-card__headline truncate"
+                                                            style={{ maxWidth: 420 }}
                                                         >
-                                                            {candidate.name}
+                                                            {candidate.headline}
                                                         </span>
-                                                    </CandidateHoverCard>
-                                                    <span
-                                                        className="candidate-card__headline truncate"
-                                                        style={{ maxWidth: 420 }}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedCandidateIds.includes(
+                                                            candidate._id,
+                                                        )}
+                                                        onChange={(event) => {
+                                                            setSelectedCandidateIds((prev) =>
+                                                                event.target.checked
+                                                                    ? [...prev, candidate._id]
+                                                                    : prev.filter(
+                                                                          (id) =>
+                                                                              id !== candidate._id,
+                                                                      ),
+                                                            );
+                                                        }}
+                                                        aria-label={`Select ${candidate.name}`}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <div
+                                                        className={`badge badge--${candidate.status}`}
                                                     >
-                                                        {candidate.headline}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div className={`badge badge--${candidate.status}`}>
-                                                    {candidate.status}
-                                                </div>
-                                            </td>
-                                            <td>
-                                                {candidate.score !== null &&
-                                                candidate.score !== undefined ? (
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className={`score-value text-xl`}
-                                                            style={{
-                                                                color:
-                                                                    candidate.score.value >= 70
-                                                                        ? 'var(--color-success)'
-                                                                        : candidate.score.value >=
-                                                                            50
-                                                                          ? 'var(--color-warning)'
-                                                                          : 'var(--color-danger)',
-                                                            }}
-                                                        >
-                                                            {candidate.score.value}
-                                                        </div>
-                                                        <div
-                                                            className="progress-bar opacity-80"
-                                                            style={{ width: 60 }}
-                                                        >
+                                                        {candidate.status}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    {candidate.score !== null &&
+                                                    candidate.score !== undefined ? (
+                                                        <div className="flex items-center gap-3">
                                                             <div
-                                                                className="progress-bar__fill"
+                                                                className={`score-value text-xl`}
                                                                 style={{
-                                                                    width: `${candidate.score.value}%`,
-                                                                    background:
+                                                                    color:
                                                                         candidate.score.value >= 70
                                                                             ? 'var(--color-success)'
                                                                             : candidate.score
@@ -835,145 +915,204 @@ export default function JobDetailsPage() {
                                                                               ? 'var(--color-warning)'
                                                                               : 'var(--color-danger)',
                                                                 }}
-                                                            />
+                                                            >
+                                                                {candidate.score.value}
+                                                            </div>
+                                                            <div
+                                                                className="progress-bar opacity-80"
+                                                                style={{ width: 60 }}
+                                                            >
+                                                                <div
+                                                                    className="progress-bar__fill"
+                                                                    style={{
+                                                                        width: `${candidate.score.value}%`,
+                                                                        background:
+                                                                            candidate.score.value >=
+                                                                            70
+                                                                                ? 'var(--color-success)'
+                                                                                : candidate.score
+                                                                                        .value >= 50
+                                                                                  ? 'var(--color-warning)'
+                                                                                  : 'var(--color-danger)',
+                                                                    }}
+                                                                />
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-xs text-muted italic">
-                                                        Pending...
+                                                    ) : (
+                                                        <span className="text-xs text-muted italic">
+                                                            Pending...
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    <span className="chip-pill">
+                                                        {candidate.source}
                                                     </span>
-                                                )}
-                                            </td>
-                                            <td>
-                                                <span className="chip-pill">
-                                                    {candidate.source}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <Link
-                                                    to={`/candidates/${candidate._id}`}
-                                                    className="btn btn--secondary btn--sm"
-                                                >
-                                                    Details
-                                                </Link>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                                                </td>
+                                                <td>
+                                                    <Link
+                                                        to={`/candidates/${candidate._id}`}
+                                                        className="btn btn--secondary btn--sm"
+                                                    >
+                                                        Details
+                                                    </Link>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
 
-                    {viewMode === 'list' && !candidatesLoading && candidates.length > 0 && (
-                        <div
-                            className="mobile-only"
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 12,
-                                marginTop: 12,
-                            }}
-                        >
-                            {candidates.map((candidate) => (
-                                <div key={candidate._id} className="card" style={{ padding: 14 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {viewMode === 'list' && !candidatesLoading && candidates.length > 0 && (
+                            <div
+                                className="mobile-only job-candidate-mobile-list"
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 12,
+                                    marginTop: 12,
+                                }}
+                            >
+                                {candidates.map((candidate) => (
+                                    <div
+                                        key={candidate._id}
+                                        className="card"
+                                        style={{ padding: 14 }}
+                                    >
                                         <div
                                             style={{
-                                                width: 40,
-                                                height: 40,
-                                                borderRadius: '50%',
-                                                background: 'var(--color-primary)',
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontSize: 12,
-                                                fontWeight: 700,
-                                                color: '#fff',
+                                                gap: 10,
                                             }}
                                         >
-                                            {candidate.name
-                                                .split(' ')
-                                                .map((p) => p[0])
-                                                .join('')
-                                                .slice(0, 2)
-                                                .toUpperCase()}
-                                        </div>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <CandidateHoverCard candidate={candidate}>
-                                                <div
-                                                    className="candidate-card__name truncate"
-                                                    style={{ display: 'inline-block' }}
-                                                >
-                                                    {candidate.name}
-                                                </div>
-                                            </CandidateHoverCard>
-                                            <div className="candidate-card__headline truncate">
-                                                {candidate.headline}
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedCandidateIds.includes(
+                                                    candidate._id,
+                                                )}
+                                                onChange={(event) => {
+                                                    setSelectedCandidateIds((prev) =>
+                                                        event.target.checked
+                                                            ? [...prev, candidate._id]
+                                                            : prev.filter(
+                                                                  (id) => id !== candidate._id,
+                                                              ),
+                                                    );
+                                                }}
+                                                aria-label={`Select ${candidate.name}`}
+                                            />
+                                            <div
+                                                style={{
+                                                    width: 40,
+                                                    height: 40,
+                                                    borderRadius: '50%',
+                                                    background: 'var(--color-primary)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: 12,
+                                                    fontWeight: 700,
+                                                    color: '#fff',
+                                                }}
+                                            >
+                                                {candidate.name
+                                                    .split(' ')
+                                                    .map((p) => p[0])
+                                                    .join('')
+                                                    .slice(0, 2)
+                                                    .toUpperCase()}
                                             </div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <CandidateHoverCard candidate={candidate}>
+                                                    <div
+                                                        className="candidate-card__name truncate"
+                                                        style={{ display: 'inline-block' }}
+                                                    >
+                                                        {candidate.name}
+                                                    </div>
+                                                </CandidateHoverCard>
+                                                <div className="candidate-card__headline truncate">
+                                                    {candidate.headline}
+                                                </div>
+                                            </div>
+                                            <Link
+                                                to={`/candidates/${candidate._id}`}
+                                                className="btn btn--secondary btn--sm"
+                                            >
+                                                Details
+                                            </Link>
                                         </div>
-                                        <Link
-                                            to={`/candidates/${candidate._id}`}
-                                            className="btn btn--secondary btn--sm"
-                                        >
-                                            Details
-                                        </Link>
                                     </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {!candidatesLoading && candidates.length === 0 && (
+                            <div
+                                style={{
+                                    textAlign: 'center',
+                                    padding: '32px 20px',
+                                    color: 'var(--color-text-muted)',
+                                }}
+                            >
+                                <p>No candidates found matching the selected filters.</p>
+                            </div>
+                        )}
+
+                        {candidatesData?.pagination && (
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    marginTop: 16,
+                                    paddingTop: 16,
+                                    borderTop: '1px solid var(--color-border)',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        fontSize: '0.875rem',
+                                        color: 'var(--color-text-muted)',
+                                    }}
+                                >
+                                    Page {page} of{' '}
+                                    {Math.max(1, candidatesData.pagination.totalPages)}
                                 </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {!candidatesLoading && candidates.length === 0 && (
-                        <div
-                            style={{
-                                textAlign: 'center',
-                                padding: '32px 20px',
-                                color: 'var(--color-text-muted)',
-                            }}
-                        >
-                            <p>No candidates found matching the selected filters.</p>
-                        </div>
-                    )}
-
-                    {candidatesData?.pagination && (
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                marginTop: 16,
-                                paddingTop: 16,
-                                borderTop: '1px solid var(--color-border)',
-                            }}
-                        >
-                            <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                                Page {page} of {candidatesData.pagination.totalPages}
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button
+                                        className="btn btn--secondary btn--sm"
+                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                        disabled={page === 1}
+                                        aria-label="Previous page"
+                                    >
+                                        <ChevronLeft size={14} />
+                                    </button>
+                                    <button
+                                        className="btn btn--secondary btn--sm"
+                                        onClick={() =>
+                                            setPage((p) =>
+                                                Math.min(
+                                                    Math.max(
+                                                        1,
+                                                        candidatesData.pagination.totalPages,
+                                                    ),
+                                                    p + 1,
+                                                ),
+                                            )
+                                        }
+                                        disabled={page === candidatesData.pagination.totalPages}
+                                        aria-label="Next page"
+                                    >
+                                        <ChevronRight size={14} />
+                                    </button>
+                                </div>
                             </div>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                <button
-                                    className="btn btn--secondary btn--sm"
-                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                    disabled={page === 1}
-                                    aria-label="Previous page"
-                                >
-                                    <ChevronLeft size={14} />
-                                </button>
-                                <button
-                                    className="btn btn--secondary btn--sm"
-                                    onClick={() =>
-                                        setPage((p) =>
-                                            Math.min(candidatesData.pagination.totalPages, p + 1),
-                                        )
-                                    }
-                                    disabled={page === candidatesData.pagination.totalPages}
-                                    aria-label="Next page"
-                                >
-                                    <ChevronRight size={14} />
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
+                        )}
+                    </div>
+                </>
             )}
         </div>
     );
