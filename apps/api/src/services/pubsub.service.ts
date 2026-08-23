@@ -1,21 +1,11 @@
-import Redis from 'ioredis';
-import { env } from '@/config/env';
+import { createRedisConnection } from '@/config/redis';
 import { logger } from '@/config/logger';
 import { sse } from './sse.service';
 import type { ITask } from '@/types';
 
-const redisConfig = {
-    host: env.REDIS_HOST,
-    port: env.REDIS_PORT,
-    password: env.REDIS_PASSWORD,
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    lazyConnect: false,
-};
-
 // We use two different clients for pub and sub to avoid blocking
-export const pubClient = new Redis(redisConfig);
-export const subClient = new Redis(redisConfig);
+export const pubClient = createRedisConnection();
+export const subClient = createRedisConnection();
 
 pubClient.on('error', err => logger.error('Redis PubClient error', { error: err.message }));
 subClient.on('error', err => logger.error('Redis SubClient error', { error: err.message }));

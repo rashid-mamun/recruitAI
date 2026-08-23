@@ -36,6 +36,7 @@ const envSchema = z
         REDIS_PORT: z.coerce.number().default(6379),
         REDIS_PASSWORD: z.string().optional(),
         REDIS_URL: z.string().url().optional(),
+        REDIS_SOCKET: z.string().optional(),
         EMBEDDED_WORKERS: z.preprocess(
             value => value === true || value === 'true' || value === '1',
             z.boolean()
