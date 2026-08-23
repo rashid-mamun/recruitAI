@@ -5,6 +5,20 @@ import { allowedOrigins } from '@/config/env';
 const app = createApp();
 
 describe('Security and Health Hardening', () => {
+    it('GET / identifies the deployed API', async () => {
+        const res = await request(app).get('/');
+
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({
+            success: true,
+            data: {
+                service: 'RecruitAI API',
+                status: 'ok',
+                health: '/health/ready',
+            },
+        });
+    });
+
     it('GET /health/live returns liveness metadata', async () => {
         const res = await request(app).get('/health/live');
 

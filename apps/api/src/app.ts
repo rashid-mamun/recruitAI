@@ -75,6 +75,19 @@ export function createApp(): Application {
 
     app.use(requestLogger);
 
+    app.get('/', (_req, res) => {
+        res.json({
+            success: true,
+            data: {
+                service: 'RecruitAI API',
+                status: 'ok',
+                frontend: env.FRONTEND_URL,
+                health: '/health/ready',
+                documentation: apiDocsEnabled ? '/api/docs' : null,
+            },
+        });
+    });
+
     const serverAdapter = new ExpressAdapter();
     serverAdapter.setBasePath('/admin/queues');
     createBullBoard({
