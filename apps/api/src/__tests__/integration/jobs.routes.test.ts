@@ -1,13 +1,13 @@
 import request from 'supertest';
 import { createApp } from '@/app';
 import { Job } from '@/modules/jobs/job.model';
-import { User } from '@/modules/auth/user.model';
 import { sourcingQueue } from '@/queues';
 
 const app = createApp();
 
 describe('Jobs Routes (Integration)', () => {
     let token: string;
+    let organizationId: string;
 
     const testJob = {
         title: 'Senior Node.js Developer',
@@ -16,15 +16,18 @@ describe('Jobs Routes (Integration)', () => {
         requirements: ['Node.js', 'TypeScript', 'MongoDB'],
     };
 
-    beforeAll(async () => {
+    beforeEach(async () => {
         // Register a user and capture JWT token
-        const res = await request(app).post('/api/auth/register').send({
-            name: 'Job Tester',
-            email: 'jobs@example.com',
-            password: 'Password123!',
-            role: 'recruiter',
-        });
+        const res = await request(app)
+            .post('/api/auth/register')
+            .send({
+                name: 'Job Tester',
+                email: `jobs-${Date.now()}-${Math.random()}@example.com`,
+                password: 'Password123!',
+                role: 'recruiter',
+            });
         token = res.body.data.token;
+        organizationId = res.body.data.user.defaultOrganizationId;
     });
 
     describe('POST /api/jobs', () => {
@@ -61,7 +64,7 @@ describe('Jobs Routes (Integration)', () => {
 
     describe('GET /api/jobs', () => {
         beforeEach(async () => {
-            await Job.create(testJob);
+            await Job.create({ ...testJob, organizationId });
         });
 
         it('with auth -> 200, returns array', async () => {
@@ -78,7 +81,7 @@ describe('Jobs Routes (Integration)', () => {
         let createdJobId: string;
 
         beforeEach(async () => {
-            const job = await Job.create(testJob);
+            const job = await Job.create({ ...testJob, organizationId });
             createdJobId = job._id.toString();
         });
 
@@ -107,7 +110,7 @@ describe('Jobs Routes (Integration)', () => {
         let createdJobId: string;
 
         beforeEach(async () => {
-            const job = await Job.create(testJob);
+            const job = await Job.create({ ...testJob, organizationId });
             createdJobId = job._id.toString();
         });
 
@@ -127,6 +130,21 @@ describe('Jobs Routes (Integration)', () => {
 
             // Verify mock was called
             expect(sourcingQueue.add).toHaveBeenCalled();
+        });
+
+        it('paused job -> 409 and does not queue sourcing', async () => {
+            await Job.findByIdAndUpdate(createdJobId, { status: 'paused' });
+            jest.mocked(sourcingQueue.add).mockClear();
+
+            const res = await request(app)
+                .post(`/api/jobs/${createdJobId}/sourcing-tasks`)
+                .set('Authorization', `Bearer ${token}`)
+                .send({ query: 'Node.js Developer', limit: 10 });
+
+            expect(res.status).toBe(409);
+            expect(res.body.success).toBe(false);
+            expect(res.body.error).toMatch(/resume this role/i);
+            expect(sourcingQueue.add).not.toHaveBeenCalled();
         });
     });
 });
