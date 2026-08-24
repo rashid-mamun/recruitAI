@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 import type { IMessageDocument, MessageChannel, MessageStatus, IntentType } from '@/types';
 
 const MessageSchema = new Schema<IMessageDocument>(

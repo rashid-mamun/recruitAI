@@ -312,7 +312,7 @@ async function main() {
                 rationale: `${name} provided credible ${competency.name} evidence.`,
                 evidence: [`Delivered measurable outcomes using ${competency.name}.`],
             }));
-            const evaluation = await Evaluation.create({
+            await Evaluation.create({
                 organizationId,
                 jobId: job._id,
                 candidateId: candidate._id,

@@ -1,6 +1,6 @@
 import { openaiProvider } from '@/services/ai/providers/openai.provider';
 import { openai } from '@/config/ai';
-import { cacheGet, cacheSet } from '@/config/redis';
+import { cacheGet } from '@/config/redis';
 
 jest.mock('@/config/redis', () => ({
     cacheGet: jest.fn(),
@@ -8,8 +8,6 @@ jest.mock('@/config/redis', () => ({
     CacheKeys: { score: jest.fn() },
     CacheTTL: { SCORE: 3600, SCORE_FALLBACK: 1800 },
 }));
-import { startScoringWorker } from '@/workers/scoring.worker';
-
 // We'll test the provider logic here since that's the core of scoring service
 describe('Scoring Service (OpenAI Provider)', () => {
     const mockCandidate = {

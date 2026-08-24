@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 import type { ITaskDocument, TaskType, TaskStatus } from '@/types';
 
 const TaskSchema = new Schema<ITaskDocument>(

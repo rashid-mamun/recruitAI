@@ -5,7 +5,7 @@ import { AppError } from './errorHandler';
 import { Membership } from '@/modules/organizations/membership.model';
 import type { MembershipRole } from '@/types';
 
-export const protect = (req: Request, res: Response, next: NextFunction) => {
+export const protect = (req: Request, _res: Response, next: NextFunction) => {
     let token: string | undefined;
 
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {

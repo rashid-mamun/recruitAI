@@ -6,7 +6,7 @@ import { User } from '@/modules/auth/user.model';
 import { AppError, NotFoundError } from '@/middleware/errorHandler';
 import { env } from '@/config/env';
 import { createCheckoutSession } from './billing.service';
-import type { IOrganization, IMembership, MembershipRole, OrganizationPlan } from '@/types';
+import type { IOrganization, IMembership, OrganizationPlan } from '@/types';
 import type { InviteMemberDto, UpdateMemberDto } from './organization.schema';
 
 export async function createDefaultOrganizationForUser(user: {
