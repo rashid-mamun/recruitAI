@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 import type { IJobDocument, JobType, JobStatus } from '@/types';
 
 const JobSchema = new Schema<IJobDocument>(

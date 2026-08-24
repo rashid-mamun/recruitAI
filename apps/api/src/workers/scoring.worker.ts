@@ -13,7 +13,6 @@ import { sendTaskCompletedEmail, sendTaskFailedEmail } from '@/services/email.se
 import { NotFoundError } from '@/middleware/errorHandler';
 import type { ScoringJobData } from '@/queues';
 import type { ICandidateScore } from '@/types';
-import pRetry from 'p-retry';
 
 export function startScoringWorker(): Worker {
     const worker = new Worker<ScoringJobData>(

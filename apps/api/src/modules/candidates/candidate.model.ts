@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 import type { ICandidateDocument, CandidateStatus } from '@/types';
 
 const CandidateSchema = new Schema<ICandidateDocument>(

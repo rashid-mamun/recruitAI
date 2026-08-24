@@ -12,7 +12,6 @@ import { markProcessing, markCompleted, markFailed } from '@/modules/tasks/task.
 import { sendTaskCompletedEmail, sendTaskFailedEmail } from '@/services/email.service';
 import { NotFoundError } from '@/middleware/errorHandler';
 import type { OutreachJobData } from '@/queues';
-import pRetry from 'p-retry';
 
 export function startOutreachWorker(): Worker {
     const worker = new Worker<OutreachJobData>(

@@ -1,6 +1,4 @@
 import puppeteer from 'puppeteer';
-import { SourcingProvider } from '@/types';
-
 import type { SourcingProvider as ISourcingProvider } from './provider.interface';
 
 export const puppeteerProvider: ISourcingProvider = {

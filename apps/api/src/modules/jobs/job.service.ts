@@ -38,12 +38,10 @@ export async function listJobs(query: JobQueryDto, organizationId?: string) {
 
     const jobIds = jobs.map(job => job._id);
 
-    const [candidates, messages] = await Promise.all([
-        Candidate.find({ ...organizationFilter(organizationId), jobId: { $in: jobIds } }).lean(),
-        Message.find({ jobId: { $in: jobIds }, role: 'candidate' })
-            .select('candidateId jobId')
-            .lean(),
-    ]);
+    const candidates = await Candidate.find({
+        ...organizationFilter(organizationId),
+        jobId: { $in: jobIds },
+    }).lean();
 
     const candidatesByJob = candidates.reduce(
         (acc, c) => {
@@ -55,20 +53,9 @@ export async function listJobs(query: JobQueryDto, organizationId?: string) {
         {} as Record<string, any[]>
     );
 
-    const messagesByJob = messages.reduce(
-        (acc, m) => {
-            const jId = (m as any).jobId.toString();
-            if (!acc[jId]) acc[jId] = [];
-            acc[jId].push(m);
-            return acc;
-        },
-        {} as Record<string, any[]>
-    );
-
     const data = jobs.map(job => {
         const jId = job._id.toString();
         const cands = candidatesByJob[jId] || [];
-        const msgs = messagesByJob[jId] || [];
 
         const sourced = cands.length;
         const scored = cands.filter(c => c.score?.value > 0).length;
@@ -84,11 +71,6 @@ export async function listJobs(query: JobQueryDto, organizationId?: string) {
         ).length;
         const interested = cands.filter(c => c.status === 'interested').length;
         const hired = cands.filter(c => c.status === 'hired').length;
-
-        const respondedIds = new Set(msgs.map(m => m.candidateId.toString()));
-        const responded = respondedIds.size;
-
-        const responseRate = contacted > 0 ? Math.round((responded / contacted) * 1000) / 10 : 0;
 
         const scores = cands.filter(c => c.score?.value > 0).map(c => c.score.value);
         const avgScore =
